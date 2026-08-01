@@ -1790,7 +1790,7 @@ function SimulationPage() {
         const isComp = compromisedNodes.has(n.id);
         const isIso = isolatedNodes.has(n.id);
         const statusStr = isIso ? "[ISOLATED]" : isComp ? "[COMPROMISED]" : "[NOMINAL]";
-        newLogs.push(`  - ${n.id} (${n.label}): ${statusStr} · Role: ${n.sub}`);
+        newLogs.push(`  - ${n.id} (${n.label}): ${statusStr} · Kind: ${n.kind.toUpperCase()}`);
       });
     } else if (cmd === "isolate") {
       if (!targetArg) {
@@ -2376,108 +2376,12 @@ function SimulationPage() {
         </div>
       </section>
 
-      {/* OUTCOME — branches with operator choices */}
-      <section className="relative border-b border-rule overflow-hidden">
-        <img
-          src={facility}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-25"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
-        <div className="relative mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-20 sm:py-24 lg:py-36">
-          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-            <p className="mono-label">SECTION 04 — OUTCOME</p>
-            <p className="mono-label text-accent">BRANCH · {outcome.branch}</p>
-          </div>
-          <h2 className="display text-[14vw] sm:text-[12vw] lg:text-[160px] leading-[0.85] mt-5 sm:mt-6">
-            {outcome.mw} MW SHED.
-            <br />
-            <span className="text-accent">{outcome.duration}.</span>
-            <br />
-            <span className="text-foreground/40">{outcome.alarms}.</span>
-          </h2>
-          <div className="grid grid-cols-12 gap-6 sm:gap-8 mt-12 sm:mt-16">
-            <p className="col-span-12 md:col-span-5 md:col-start-2 font-serif text-xl sm:text-2xl italic leading-snug">
-              {outcome.narrative}
-            </p>
-            <div className="col-span-12 md:col-span-4 md:col-start-8 grid grid-cols-3 gap-4 sm:gap-6 border-l-0 md:border-l border-rule md:pl-8">
-              <Stat k="MTTD" v={outcome.mttd} big />
-              <Stat k="MTTR" v={outcome.mttr} big />
-              <Stat k="COST" v={outcome.cost} big />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FOOTER actions */}
-      <section className="border-b border-rule">
-        <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-10 sm:py-12 flex flex-wrap items-center justify-between gap-4 sm:gap-6">
-          <div className="mono-label">
-            EXERCISE · BRANCH {outcome.branch} · DOSSIER #HW-{outcome.dossierId}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={restart}
-              className="border border-rule mono-label px-4 sm:px-5 py-3 hover:border-accent hover:text-accent transition-colors"
-            >
-              RESTART
-            </button>
-            <button
-              onClick={share}
-              className="border border-rule mono-label px-4 sm:px-5 py-3 hover:border-accent hover:text-accent transition-colors"
-            >
-              SHARE THIS MOMENT ⎘
-            </button>
-            <button
-              onClick={exportDossier}
-              className="border border-rule mono-label px-4 sm:px-5 py-3 hover:border-accent hover:text-accent transition-colors"
-            >
-              EXPORT DOSSIER ↓
-            </button>
-            <Link
-              to="/"
-              className="bg-foreground text-background mono-label px-4 sm:px-5 py-3 hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              ← RETURN TO BRIEFING
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Node detail overlay */}
-      {activeNode && (
-        <NodeOverlay
-          node={activeNode}
-          onClose={() => setSelected(null)}
-          compromised={compromisedNodes.has(activeNode.id)}
-          events={EVENTS.filter((e) => e.node === activeNode.id)}
-          t={t}
-          onJump={(toT) => setT(toT + 0.1)}
-        />
-      )}
-
-      {/* Decision prompt overlay */}
-      {activeDecision && (
-        <DecisionOverlay
-          decision={activeDecision}
-          onChoose={(id) => {
-            setChoices((c) => ({ ...c, [activeDecision.id]: id }));
-            setActiveDecision(null);
-            setPlaying(true);
-          }}
-          onDismiss={() => {
-            setActiveDecision(null);
-            setPlaying(true);
-          }}
-        />
-      )}
-
-      {/* SECTION 03B — TACTICAL THREAT INTELLIGENCE & EXPLAINABLE AI */}
+      {/* SECTION 04 — TACTICAL THREAT INTELLIGENCE & EXPLAINABLE AI */}
       <section className="border-b border-rule bg-background py-16 sm:py-20 px-5 sm:px-6 lg:px-10">
         <div className="mx-auto max-w-[1600px] space-y-8">
           <div className="flex flex-wrap items-baseline justify-between border-b border-rule pb-6">
             <div>
-              <p className="mono-label text-accent">SECTION 03B — THREAT DIAGNOSTICS & SIEM DETECTIONS</p>
+              <p className="mono-label text-accent">SECTION 04 — THREAT DIAGNOSTICS & SIEM DETECTIONS</p>
               <h3 className="display text-3xl sm:text-4xl lg:text-5xl mt-2">
                 Explainable AI & Live Threat Feed
               </h3>
@@ -2492,15 +2396,15 @@ function SimulationPage() {
                 activeEvent={
                   activeIdx >= 0
                     ? {
-                        id: `evt-${activeIdx}`,
-                        t: EVENTS[activeIdx].t,
+                        eventId: `evt-${activeIdx}`,
+                        timestamp: EVENTS[activeIdx].t,
+                        type: "TELEMETRY_ANOMALY" as const,
                         sourceAssetId: EVENTS[activeIdx].node,
                         targetAssetId: EVENTS[activeIdx].node,
-                        tactic: EVENTS[activeIdx].tag,
-                        technique: EVENTS[activeIdx].title,
-                        severity: EVENTS[activeIdx].sev,
+                        severity: EVENTS[activeIdx].sev === "MEDIUM" ? "WARN" : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
                         title: EVENTS[activeIdx].title,
                         description: EVENTS[activeIdx].desc,
+                        data: {},
                       }
                     : null
                 }
@@ -2518,6 +2422,39 @@ function SimulationPage() {
             </div>
             <div className="lg:col-span-1">
               <CISAThreatFeed activeSector={sector} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 05 — OUTCOME — branches with operator choices */}
+      <section className="relative border-b border-rule overflow-hidden">
+        <img
+          src={facility}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-25"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
+        <div className="relative mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-20 sm:py-24 lg:py-36">
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+            <p className="mono-label">SECTION 05 — OUTCOME</p>
+            <p className="mono-label text-accent">BRANCH · {outcome.branch}</p>
+          </div>
+          <h2 className="display text-[14vw] sm:text-[12vw] lg:text-[160px] leading-[0.85] mt-5 sm:mt-6">
+            {outcome.mw} MW SHED.
+            <br />
+            <span className="text-accent">{outcome.duration}.</span>
+            <br />
+            <span className="text-foreground/40">{outcome.alarms}.</span>
+          </h2>
+          <div className="grid grid-cols-12 gap-6 sm:gap-8 mt-12 sm:mt-16">
+            <p className="col-span-12 md:col-span-5 md:col-start-2 font-serif text-xl sm:text-2xl italic leading-snug">
+              {outcome.narrative}
+            </p>
+            <div className="col-span-12 md:col-span-4 md:col-start-8 grid grid-cols-3 gap-4 sm:gap-6 border-l-0 md:border-l border-rule md:pl-8">
+              <Stat k="MTTD" v={outcome.mttd} big />
+              <Stat k="MTTR" v={outcome.mttr} big />
+              <Stat k="COST" v={outcome.cost} big />
             </div>
           </div>
         </div>

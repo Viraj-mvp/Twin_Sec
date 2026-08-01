@@ -137,3 +137,9 @@ npm run lint -- --fix  # Auto-fix fixable lint errors
 - AI input/output scrubbing via regex (shellcode, private keys, AWS keys)
 - Cookie: HttpOnly, SameSite=lax, Secure in production
 - **IMPORTANT**: `data/` directory containing SQLite DB should be in `.gitignore`
+
+## Deployment & Git Rules
+
+> [!CAUTION]
+> **NO AUTOMATIC GITHUB PUSH**: Never execute `git push` or automatically upload code updates to remote GitHub repositories after completing edits or fixes. All code changes must remain local until the user explicitly commands a GitHub push or manually uploads the repository.
+

@@ -323,7 +323,10 @@ export function KineticOperatorNav() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const isMarqueeRoute = location.pathname === "/" || location.pathname === "/twin-engine";
+  const hasTopBarRoute =
+    location.pathname === "/" ||
+    location.pathname === "/twin-engine" ||
+    location.pathname.startsWith("/simulation");
 
   return (
     <div ref={containerRef}>
@@ -336,8 +339,8 @@ export function KineticOperatorNav() {
         onClick={toggleMenu}
         className={cn(
           "nav-close-btn fixed z-[100] transition-all duration-200",
-          isMarqueeRoute && !scrolled
-            ? "top-[54px] md:top-[60px] right-4 md:right-6"
+          hasTopBarRoute && !scrolled
+            ? "top-[52px] sm:top-[56px] right-4 md:right-6"
             : "top-3 md:top-4 right-4 md:right-6",
         )}
       />
