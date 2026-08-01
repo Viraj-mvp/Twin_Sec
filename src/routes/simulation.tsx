@@ -2514,6 +2514,48 @@ function SimulationPage() {
         setTerminalInput={setTerminalInput}
         handleTerminalSubmit={handleTerminalSubmit}
       />
+
+      {/* ASSET DOSSIER MODAL OVERLAY */}
+      {selected && activeNode && (
+        <NodeOverlay
+          node={activeNode}
+          onClose={() => setSelected(null)}
+          compromised={compromisedNodes.has(activeNode.id)}
+          isIsolated={isolatedNodes.has(activeNode.id)}
+          onToggleIsolate={() => {
+            setIsolatedNodes((prev) => {
+              const next = new Set(prev);
+              if (next.has(activeNode.id)) {
+                next.delete(activeNode.id);
+                setShareToast(`ASSET ${activeNode.label} RECONNECTED TO OT BUS`);
+              } else {
+                next.add(activeNode.id);
+                setShareToast(`ASSET ${activeNode.label} ISOLATED (AIR-GAPPED)`);
+              }
+              return next;
+            });
+            window.setTimeout(() => setShareToast(null), 3000);
+          }}
+          events={EVENTS.filter((e) => e.node === activeNode.id)}
+          t={t}
+          onJump={(jumpT) => {
+            setT(jumpT);
+            setSelected(null);
+          }}
+        />
+      )}
+
+      {/* OPERATOR DECISION PROMPT MODAL */}
+      {activeDecision && (
+        <DecisionOverlay
+          decision={activeDecision}
+          onChoose={(choiceId) => {
+            setChoices((prev) => ({ ...prev, [activeDecision.id]: choiceId }));
+            setActiveDecision(null);
+          }}
+          onDismiss={() => setActiveDecision(null)}
+        />
+      )}
     </main>
   );
 }
@@ -3028,6 +3070,8 @@ function NodeOverlay({
   node,
   onClose,
   compromised,
+  isIsolated,
+  onToggleIsolate,
   events,
   t,
   onJump,
@@ -3035,6 +3079,8 @@ function NodeOverlay({
   node: Node;
   onClose: () => void;
   compromised: boolean;
+  isIsolated?: boolean;
+  onToggleIsolate?: () => void;
   events: Event[];
   t: number;
   onJump: (t: number) => void;
@@ -3046,88 +3092,139 @@ function NodeOverlay({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-background/85 backdrop-blur-sm p-0 sm:p-6 animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-background/85 backdrop-blur-md p-0 sm:p-6 animate-fade-in"
+      onClick={onClose}
+    >
       <div
-        className="relative w-full max-w-3xl bg-background border border-rule shadow-2xl flex flex-col max-h-screen sm:max-h-[90vh] overflow-auto"
+        className="relative w-full max-w-3xl bg-background border border-rule shadow-2xl flex flex-col max-h-screen sm:max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between border-b border-rule p-5 sm:p-6 gap-4">
+        {/* Header Bar */}
+        <div className="flex items-start justify-between border-b border-rule p-5 sm:p-6 gap-4 bg-muted/20">
           <div className="min-w-0">
-            <p className="mono-label">ASSET DOSSIER · RING {node.ring}</p>
+            <div className="flex items-center gap-3">
+              <span className="mono-label px-2 py-0.5 border border-rule bg-background text-accent">
+                PURDUE LEVEL {node.ring} · RING {node.ring}
+              </span>
+              {isIsolated ? (
+                <span className="mono-label px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                  AIR-GAPPED
+                </span>
+              ) : compromised ? (
+                <span className="mono-label px-2 py-0.5 bg-danger/20 text-danger border border-danger/40 animate-pulse">
+                  COMPROMISED
+                </span>
+              ) : (
+                <span className="mono-label px-2 py-0.5 bg-accent/20 text-accent border border-accent/40">
+                  NOMINAL
+                </span>
+              )}
+            </div>
             <p className="display text-4xl sm:text-6xl mt-2 leading-none">{node.label}</p>
-            <p className="font-mono text-xs text-foreground/60 mt-2 uppercase">{node.kind}</p>
+            <p className="font-mono text-xs text-foreground/60 mt-2 uppercase tracking-wider">{node.kind}</p>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 size-10 border border-rule mono-label hover:border-accent hover:text-accent transition-colors"
+            className="shrink-0 size-10 border border-rule mono-label hover:border-accent hover:text-accent transition-colors flex items-center justify-center text-lg"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-rule">
-          <div className="p-5 sm:p-6 border-b sm:border-b-0 sm:border-r border-rule">
-            <p className="mono-label">STATE</p>
-            <p
-              className={`display text-3xl sm:text-4xl mt-2 ${compromised ? "text-danger" : "text-accent"}`}
-            >
-              {compromised ? "COMPROMISED" : "NOMINAL"}
-            </p>
-            <div className="mt-5 space-y-3 font-mono text-xs text-foreground/70">
-              <Row k="vendor" v={node.vendor} />
-              <Row k="firmware" v={node.firmware} />
-              <Row k="exposure" v={node.exposure} />
-              <Row k="t_clock" v={`T+${fmt(t)}`} />
+        {/* Content Body (Scrollable) */}
+        <div className="overflow-y-auto flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-rule">
+            <div className="p-5 sm:p-6 border-b sm:border-b-0 sm:border-r border-rule">
+              <p className="mono-label">TELEMETRY & HARDWARE PROFILE</p>
+              <p
+                className={`display text-2xl sm:text-3xl mt-2 ${
+                  isIsolated ? "text-amber-400" : compromised ? "text-danger" : "text-accent"
+                }`}
+              >
+                {isIsolated ? "ISOLATED FROM OT BUS" : compromised ? "COMPROMISED VECTOR" : "NOMINAL OPERATION"}
+              </p>
+              <div className="mt-5 space-y-3 font-mono text-xs text-foreground/70">
+                <Row k="vendor" v={node.vendor} />
+                <Row k="firmware" v={node.firmware} />
+                <Row k="exposure" v={node.exposure} />
+                <Row k="ip_addr" v={`10.240.${node.ring}.${node.id.replace(/\D/g, "") || "10"}`} />
+                <Row k="t_clock" v={`T+${fmt(t)}`} />
+              </div>
+            </div>
+            <div className="p-5 sm:p-6">
+              <p className="mono-label">DOWNSTREAM & AFFECTED ASSETS</p>
+              <ul className="mt-3 space-y-2 font-serif text-base sm:text-lg">
+                {node.affects.map((a) => (
+                  <li key={a} className="flex items-baseline gap-3">
+                    <span className="size-1.5 bg-accent shrink-0 translate-y-0.5" />
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-6 pt-4 border-t border-rule/50">
+                <p className="mono-label text-foreground/50 text-[10px]">ATTESTATION SIGNATURE</p>
+                <p className="font-mono text-[11px] text-accent/80 mt-1 truncate">
+                  SHA256:8f4e2b09a{node.id}93cf82e01b
+                </p>
+              </div>
             </div>
           </div>
+
           <div className="p-5 sm:p-6">
-            <p className="mono-label">AFFECTED ASSETS</p>
-            <ul className="mt-3 space-y-2 font-serif text-lg">
-              {node.affects.map((a) => (
-                <li key={a} className="flex items-baseline gap-3">
-                  <span className="size-1.5 bg-accent shrink-0 translate-y-1" />
-                  <span>{a}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="flex items-center justify-between">
+              <p className="mono-label">TIMELINE FRAMES · TOUCHING THIS ASSET</p>
+              <span className="mono-label text-xs text-foreground/60">{events.length} EVENTS</span>
+            </div>
+            {events.length === 0 ? (
+              <p className="mt-4 font-serif italic text-foreground/60">
+                No incident frames currently touch this asset directly.
+              </p>
+            ) : (
+              <ol className="mt-4 space-y-3">
+                {events.map((e, i) => (
+                  <li key={i}>
+                    <button
+                      onClick={() => onJump(e.t)}
+                      className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
+                    >
+                      <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
+                        T+{fmt(e.t)}
+                      </span>
+                      <span className={`size-2.5 ${sevColor(e.sev)}`} />
+                      <span className="font-serif text-sm sm:text-base font-medium truncate">{e.title}</span>
+                      <span className="mono-label text-xs text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                        JUMP →
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
 
-        <div className="p-5 sm:p-6">
-          <p className="mono-label">TIMELINE · THIS ASSET</p>
-          {events.length === 0 ? (
-            <p className="mt-3 font-serif italic text-foreground/60">
-              No incident frames touch this asset.
-            </p>
-          ) : (
-            <ol className="mt-4 space-y-3">
-              {events.map((e, i) => (
-                <li key={i}>
-                  <button
-                    onClick={() => onJump(e.t)}
-                    className="w-full text-left grid grid-cols-[5rem_auto_minmax(0,1fr)] gap-3 items-baseline border border-rule p-3 hover:border-accent transition-colors"
-                  >
-                    <span className="font-mono text-xs text-foreground/60">T+{fmt(e.t)}</span>
-                    <span className={`size-2 ${sevColor(e.sev)}`} />
-                    <span className="font-serif text-base sm:text-lg">{e.title}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <div className="p-5 sm:p-6 border-t border-rule flex flex-wrap gap-3 justify-end">
+        {/* Footer Actions */}
+        <div className="p-4 sm:p-6 border-t border-rule bg-muted/10 flex flex-wrap gap-3 justify-end items-center">
           <button
             onClick={onClose}
-            className="mono-label border border-rule px-4 py-3 hover:border-accent hover:text-accent transition-colors"
+            className="mono-label border border-rule px-4 py-2.5 hover:border-accent hover:text-accent transition-colors text-xs sm:text-sm"
           >
-            CLOSE
+            CLOSE DOSSIER [ESC]
           </button>
-          <button className="mono-label bg-accent text-accent-foreground px-4 py-3 hover:bg-foreground hover:text-background transition-colors">
-            ISOLATE ASSET →
-          </button>
+          {onToggleIsolate && (
+            <button
+              onClick={onToggleIsolate}
+              className={`mono-label px-4 py-2.5 transition-colors text-xs sm:text-sm ${
+                isIsolated
+                  ? "bg-amber-500 text-black hover:bg-amber-400 font-bold"
+                  : "bg-accent text-accent-foreground hover:bg-foreground hover:text-background font-bold"
+              }`}
+            >
+              {isIsolated ? "RECONNECT TO OT BUS ←" : "ISOLATE ASSET (AIR-GAP) →"}
+            </button>
+          )}
         </div>
       </div>
     </div>
