@@ -4,6 +4,11 @@ import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 import facility from "@/assets/facility.jpg";
 import schematic from "@/assets/schematic.jpg";
+import { KaliTerminal, TerminalFAB } from "@/components/simulation/KaliTerminal";
+import { Topology2D } from "@/components/simulation/Topology2D";
+import { ExplainableAIPanel } from "@/components/simulation/ExplainableAIPanel";
+import { SigmaRuleExport } from "@/components/simulation/SigmaRuleExport";
+import { CISAThreatFeed } from "@/components/simulation/CISAThreatFeed";
 
 const SECTOR_IDS = [
   "power",
@@ -1572,6 +1577,60 @@ function SimulationPage() {
   applyScenario(sector);
   const exercise = EXERCISES[sector];
 
+  // Cyber Range CLI Kali Terminal State
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalMaximized, setTerminalMaximized] = useState(false);
+  const [terminalPos, setTerminalPos] = useState({ x: 24, y: 24 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isolatedNodes, setIsolatedNodes] = useState<Set<string>>(new Set());
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([
+    "┌──(kali㏌twinsec)-[~/cyber-range]",
+    "└─$ twinsec-cli --init --sector=" + (sector || "power").toUpperCase(),
+    "[*]" + exercise.title + " SCADA Cyber Range Target Initialized.",
+    "[*] Target: " + exercise.site,
+    "[*] Active Protocols: " + exercise.protocols,
+    "[*] Type 'help' for available CLI commands or 'scan' to query topology nodes.",
+  ]);
+  const [terminalInput, setTerminalInput] = useState("");
+  const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    dragStartRef.current = { startX: clientX, startY: clientY, initX: terminalPos.x, initY: terminalPos.y };
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDragging || !dragStartRef.current) return;
+      const clientX = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      const deltaX = dragStartRef.current.startX - clientX;
+      const deltaY = dragStartRef.current.startY - clientY;
+      setTerminalPos({
+        x: Math.max(10, Math.min(window.innerWidth - 300, dragStartRef.current.initX + deltaX)),
+        y: Math.max(10, Math.min(window.innerHeight - 200, dragStartRef.current.initY + deltaY)),
+      });
+    };
+    const handleEnd = () => {
+      setIsDragging(false);
+      dragStartRef.current = null;
+    };
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMove);
+      window.addEventListener("mouseup", handleEnd);
+      window.addEventListener("touchmove", handleMove);
+      window.addEventListener("touchend", handleEnd);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchmove", handleMove);
+      window.removeEventListener("touchend", handleEnd);
+    };
+  }, [isDragging]);
+
   const [choices, setChoices] = useState<Record<string, ChoiceId>>({});
   const [interactions, setInteractions] = useState<{ t: number; nodeId: string }[]>([]);
   const [shareToast, setShareToast] = useState<string | null>(null);
@@ -1693,11 +1752,94 @@ function SimulationPage() {
     setChoices({});
     setInteractions([]);
     setActiveDecision(null);
+    setIsolatedNodes(new Set());
     setPlaying(true);
     if (typeof window !== "undefined" && window.location.hash) {
       history.replaceState(null, "", window.location.pathname + window.location.search);
     }
   }, []);
+
+  const handleTerminalSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const raw = terminalInput.trim();
+    if (!raw) return;
+    setTerminalInput("");
+
+    const parts = raw.toLowerCase().split(/\s+/);
+    const cmd = parts[0];
+    const targetArg = parts[1];
+
+    const newLogs = [...terminalLogs, `┌──(kali㏌twinsec)-[~/cyber-range]\n└─$ ${raw}`];
+
+    if (cmd === "clear") {
+      setTerminalLogs([]);
+      return;
+    } else if (cmd === "help" || cmd === "guide") {
+      newLogs.push(
+        "[+] TWINSEC CLI COMMAND REFERENCE:",
+        "    scan [node_id]       - Query SCADA topology nodes & open ICS ports",
+        "    isolate <node_id>    - Quarantine PLC node from SCADA network",
+        "    override <node_id>   - Send manual setpoint override to restore nominal telemetry",
+        "    patch <node_id>      - Apply firmware patch or PLC ladder logic attestation",
+        "    status               - Query live physics state (Hz, °C, bar)",
+        "    clear                - Clear terminal console",
+      );
+    } else if (cmd === "scan") {
+      newLogs.push("[*] SCANNING ICS TOPOLOGY NODES...");
+      NODES.forEach((n) => {
+        const isComp = compromisedNodes.has(n.id);
+        const isIso = isolatedNodes.has(n.id);
+        const statusStr = isIso ? "[ISOLATED]" : isComp ? "[COMPROMISED]" : "[NOMINAL]";
+        newLogs.push(`  - ${n.id} (${n.label}): ${statusStr} · Role: ${n.sub}`);
+      });
+    } else if (cmd === "isolate") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'isolate plc-3').");
+      } else {
+        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        if (targetNode) {
+          setIsolatedNodes(prev => new Set([...Array.from(prev), targetNode.id]));
+          newLogs.push(`[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) QUARANTINED.`);
+          newLogs.push(`[*] Network segment isolated. Cascade propagation halted at ${targetNode.id}.`);
+        } else {
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`);
+        }
+      }
+    } else if (cmd === "override") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'override plc-7').");
+      } else {
+        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        if (targetNode) {
+          newLogs.push(`[+] SUCCESS: Manual setpoint override issued to ${targetNode.id}.`);
+          newLogs.push(`[*] Telemetry reset to nominal operational parameters.`);
+        } else {
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`);
+        }
+      }
+    } else if (cmd === "patch") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Specify target node ID to patch (e.g. 'patch plc-3').");
+      } else {
+        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        if (targetNode) {
+          newLogs.push(`[+] SUCCESS: Firmware attestation patch deployed to ${targetNode.id}.`);
+        } else {
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'.`);
+        }
+      }
+    } else if (cmd === "status") {
+      newLogs.push(`[*] LIVE SCADA TELEMETRY:`);
+      newLogs.push(`    Rotor Speed:  ${speedHz.toFixed(2)} Hz`);
+      newLogs.push(`    Bearing Temp: ${bearingC.toFixed(1)} °C`);
+      newLogs.push(`    Feeder Press: ${pressure.toFixed(2)} bar`);
+      newLogs.push(`    Clock:        T+${fmt(t)}`);
+    } else {
+      newLogs.push(`[!] Command not recognized: '${raw}'. Type 'help' for available commands.`);
+    }
+
+    setTerminalLogs(newLogs);
+  };
 
   const buildShareUrl = useCallback(() => {
     const payload = {
@@ -2011,8 +2153,11 @@ function SimulationPage() {
             </span>
           </div>
 
-          <Topology
+          <Topology2D
+            nodes={NODES}
+            edges={EDGES}
             compromised={compromisedNodes}
+            isolatedNodes={isolatedNodes}
             selected={selected}
             onSelect={(id, source) => handleSelectNode(id, source)}
             t={t}
@@ -2327,6 +2472,57 @@ function SimulationPage() {
         />
       )}
 
+      {/* SECTION 03B — TACTICAL THREAT INTELLIGENCE & EXPLAINABLE AI */}
+      <section className="border-b border-rule bg-background py-16 sm:py-20 px-5 sm:px-6 lg:px-10">
+        <div className="mx-auto max-w-[1600px] space-y-8">
+          <div className="flex flex-wrap items-baseline justify-between border-b border-rule pb-6">
+            <div>
+              <p className="mono-label text-accent">SECTION 03B — THREAT DIAGNOSTICS & SIEM DETECTIONS</p>
+              <h3 className="display text-3xl sm:text-4xl lg:text-5xl mt-2">
+                Explainable AI & Live Threat Feed
+              </h3>
+            </div>
+            <span className="mono-label text-xs text-foreground/60">PURDUE MODEL LEVEL 0–3</span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <ExplainableAIPanel
+                sector={sector}
+                activeEvent={
+                  activeIdx >= 0
+                    ? {
+                        id: `evt-${activeIdx}`,
+                        t: EVENTS[activeIdx].t,
+                        sourceAssetId: EVENTS[activeIdx].node,
+                        targetAssetId: EVENTS[activeIdx].node,
+                        tactic: EVENTS[activeIdx].tag,
+                        technique: EVENTS[activeIdx].title,
+                        severity: EVENTS[activeIdx].sev,
+                        title: EVENTS[activeIdx].title,
+                        description: EVENTS[activeIdx].desc,
+                      }
+                    : null
+                }
+              />
+              <SigmaRuleExport
+                sector={sector}
+                unmitigatedEvents={EVENTS.slice(0, Math.max(1, activeIdx + 1)).map((ev) => ({
+                  nodeId: ev.node,
+                  nodeLabel: NODES.find((n) => n.id === ev.node)?.label || ev.node,
+                  tactic: ev.tag,
+                  mitreId: "T0855",
+                  vendor: "Siemens SCADA",
+                }))}
+              />
+            </div>
+            <div className="lg:col-span-1">
+              <CISAThreatFeed activeSector={sector} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Share-link toast */}
       {shareToast && (
         <div
@@ -2336,6 +2532,27 @@ function SimulationPage() {
           {shareToast}
         </div>
       )}
+
+      {/* Floating Cyber Range CLI Terminal Trigger FAB */}
+      <TerminalFAB
+        isOpen={terminalOpen}
+        onToggle={() => setTerminalOpen(!terminalOpen)}
+      />
+
+      {/* Draggable Kali-style Cyber Range CLI Terminal */}
+      <KaliTerminal
+        terminalOpen={terminalOpen}
+        setTerminalOpen={setTerminalOpen}
+        terminalMaximized={terminalMaximized}
+        setTerminalMaximized={setTerminalMaximized}
+        terminalPos={terminalPos}
+        isDragging={isDragging}
+        handleDragStart={handleDragStart}
+        terminalLogs={terminalLogs}
+        terminalInput={terminalInput}
+        setTerminalInput={setTerminalInput}
+        handleTerminalSubmit={handleTerminalSubmit}
+      />
     </main>
   );
 }
