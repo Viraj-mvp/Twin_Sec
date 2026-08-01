@@ -5,9 +5,14 @@ import * as fs from "fs";
 import * as path from "path";
 
 // Ensure data directory exists
-const dataDir = path.resolve(process.cwd(), "data");
+const isVercel = !!process.env.VERCEL;
+const dataDir = isVercel ? "/tmp/data" : path.resolve(process.cwd(), "data");
 if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+  } catch (e) {
+    console.warn("Could not create data directory, possibly read-only filesystem:", e);
+  }
 }
 
 const dbPath = process.env.DB_PATH ?? path.resolve(dataDir, "twinsec.db");
