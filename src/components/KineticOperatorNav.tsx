@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "@tanstack/react-router";
 import gsap from "gsap";
-import { CustomEase } from "gsap/CustomEase";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -30,10 +29,7 @@ import { useOperator } from "@/contexts/OperatorContext";
 import { loginOperator, registerOperator } from "@/lib/api/auth.functions";
 import { log } from "@/lib/logger";
 
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(CustomEase);
-  CustomEase.create("hop", "M0,0 C0.355,0.022 0.448,0.079 0.5,0.5 C0.542,0.846 0.615,1 1,1");
-}
+
 
 function initials(name: string): string {
   const parts = name.trim().split(/[\s_-]+/);
@@ -133,7 +129,7 @@ export function KineticOperatorNav() {
       .set(listItems, { y: 30, opacity: 0 })
       .set(fadeEls, { opacity: 0, y: 15 })
       .to(overlay, { opacity: 1, duration: 0.3, ease: "power2.out" })
-      .to(menuContent, { xPercent: 0, duration: 0.45, ease: "hop" }, "<")
+      .to(menuContent, { xPercent: 0, duration: 0.45, ease: "power3.out" }, "<")
       .to(
         listItems,
         { y: 0, opacity: 1, duration: 0.35, stagger: 0.05, ease: "power2.out" },

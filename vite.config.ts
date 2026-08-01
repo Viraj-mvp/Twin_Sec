@@ -21,6 +21,9 @@ export default defineConfig({
     tanstackStart({ server: { entry: "server" } }),
     react(),
   ],
+  ssr: {
+    noExternal: ["gsap", "@gsap/react"],
+  },
   build: {
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
