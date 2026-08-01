@@ -13,9 +13,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import "../styles.css";
 import appCss from "../styles.css?url";
 import { reportError } from "../lib/error-reporting";
-import { CookieConsent } from "@shared";
+import { CookieConsent } from "@/components/CookieConsent";
 import { KineticOperatorNav } from "@/components/KineticOperatorNav";
-import { usePreferences, OperatorProvider } from "@features/auth";
+import { usePreferences } from "@/lib/auth-store";
+import { OperatorProvider } from "@/contexts/OperatorContext";
 
 function NotFoundComponent() {
   return (

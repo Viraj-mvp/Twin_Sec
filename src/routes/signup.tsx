@@ -12,7 +12,9 @@ import {
   Shield,
   CheckCircle2,
 } from "lucide-react";
-import { registerOperator, saveLocalSession, useOperator } from "@features/auth";
+import { registerOperator } from "@/lib/api/auth.functions";
+import { saveLocalSession } from "@/lib/auth-store";
+import { useOperator } from "@/contexts/OperatorContext";
 import { TwinSecLogo } from "@/components/TwinSecLogo";
 import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
 import { log } from "@/lib/logger";

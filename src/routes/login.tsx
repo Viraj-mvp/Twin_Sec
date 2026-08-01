@@ -12,13 +12,9 @@ import {
   ShieldCheck,
   FolderLock,
 } from "lucide-react";
-import {
-  loginOperator,
-  registerOperator,
-  useOperatorSession,
-  saveLocalSession,
-  useOperator,
-} from "@features/auth";
+import { loginOperator } from "@/lib/api/auth.functions";
+import { saveLocalSession, useOperatorSession } from "@/lib/auth-store";
+import { useOperator } from "@/contexts/OperatorContext";
 import { TwinSecLogo } from "@/components/TwinSecLogo";
 import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
 import { CyberRadarCanvas } from "@/components/CyberRadarCanvas";

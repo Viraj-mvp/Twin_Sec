@@ -9,7 +9,8 @@ export type AITask =
   | "adversary_chat"
   | "role_briefing"
   | "phase_guidance"
-  | "diagnostic_questions";
+  | "diagnostic_questions"
+  | "attack_generator";
 
 // ── Timeout helper ──────────────────────────────────────────────
 // The Vercel AI SDK has NO built-in request timeout. A slow/free-tier

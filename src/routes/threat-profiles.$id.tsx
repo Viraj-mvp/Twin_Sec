@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { getThreatActor, interrogateThreatActor } from "@features/mindhunter";
-import { TwinSecLogo } from "@shared";
+import { getThreatActor } from "@/data/threat-actors";
+import { interrogateThreatActor } from "@/lib/api/espionage.functions";
+import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { useScrambleReveal } from "@/hooks/use-text-anim";
 
 export const Route = createFileRoute("/threat-profiles/$id")({
   head: ({ params }) => {
@@ -34,6 +36,7 @@ function ThreatProfileDetail() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const scrambleRef = useScrambleReveal<HTMLSpanElement>();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -110,22 +113,22 @@ function ThreatProfileDetail() {
   };
 
   return (
-    <main className="min-h-screen bg-background text-foreground flex flex-col relative select-none">
-      <div className="absolute inset-0 grid-bg opacity-20 pointer-events-none" />
-      <div className="absolute inset-0 scanline opacity-40 pointer-events-none" />
+    <main className="min-h-screen bg-paper text-ink flex flex-col relative select-none font-sans">
+      <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
+      <div className="absolute inset-0 scanline opacity-45 pointer-events-none" />
 
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b-2 border-rule bg-background/90 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-2 border-ink bg-paper/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 lg:px-10">
           <div className="flex items-center gap-3">
-            <TwinSecLogo className="size-6" />
+            <TwinSecLogo className="size-6 text-danger" />
             <Link
               to="/threat-profiles"
               className="display text-xl tracking-wide hover:text-danger transition-colors"
             >
               TwinSec BAU
             </Link>
-            <span className="mono-label hidden md:inline text-danger font-bold">
+            <span className="mono-label hidden md:inline text-danger font-bold pl-3 border-l border-ink/30">
               // DOSSIER: {actor.name}
             </span>
           </div>
@@ -142,7 +145,7 @@ function ThreatProfileDetail() {
                   | "smart-building"
                   | "smart-city",
               }}
-              className="bg-accent text-black border-2 border-accent px-4 py-2 font-bold shadow-comic-sm hover:-translate-x-0.5 hover:-translate-y-0.5 transition-all"
+              className="bg-danger text-paper border-2 border-danger px-4 py-2 font-bold shadow-[4px_4px_0_0_#ef4444] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             >
               LAUNCH SIMULATION ({actor.scenarioId.toUpperCase()}) →
             </Link>
@@ -150,166 +153,185 @@ function ThreatProfileDetail() {
         </div>
       </header>
 
-      {/* Profile Header & Tabs */}
-      <section className="max-w-[1600px] mx-auto w-full px-6 lg:px-10 pt-8 pb-4 relative z-10">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b-2 border-danger pb-4 gap-4">
-          <div>
-            <span className="mono-label text-danger font-bold">CLASSIFIED // FBI BAU PROFILE</span>
-            <h1 className="display text-4xl sm:text-6xl mt-1">{actor.name}</h1>
-            <p className="font-mono text-xs text-muted-foreground mt-1">
-              ORIGIN: {actor.origin} · ACTIVE SINCE: {actor.activeSince}
+      {/* Profile Header */}
+      <section className="mx-auto max-w-[1600px] w-full px-6 lg:px-10 py-16 lg:py-24 relative z-10 border-b border-ink/30">
+        <div className="grid grid-cols-12 gap-8">
+          <div className="col-span-12 lg:col-span-8">
+            <span ref={scrambleRef} className="mono-label text-danger tracking-widest uppercase">
+              CLASSIFIED // FBI BAU PROFILE
+            </span>
+            <h1 className="display text-[14vw] md:text-[100px] leading-[0.82] mt-4 mb-8">
+              {actor.name}
+            </h1>
+            <p className="font-serif italic text-2xl md:text-3xl text-ink/80 leading-snug max-w-3xl">
+              "{actor.psychologicalProfile.keyInsight}"
             </p>
           </div>
-
-          {/* Mode Tabs */}
-          <div className="flex border-2 border-rule font-mono text-xs bg-black">
-            <button
-              onClick={() => setActiveTab("dossier")}
-              className={`px-5 py-2.5 font-bold transition-all ${
-                activeTab === "dossier"
-                  ? "bg-danger text-white border-b-2 border-danger"
-                  : "bg-black text-muted-foreground hover:text-white"
-              }`}
-            >
-              📄 BAU DOSSIER
-            </button>
-            <button
-              onClick={() => setActiveTab("interrogation")}
-              className={`px-5 py-2.5 font-bold transition-all ${
-                activeTab === "interrogation"
-                  ? "bg-danger text-white border-b-2 border-danger"
-                  : "bg-black text-muted-foreground hover:text-white"
-              }`}
-            >
-              🎙️ POST-CAPTURE INTERROGATION
-            </button>
+          <div className="col-span-12 lg:col-span-4 flex flex-col justify-end lg:items-end">
+            <div className="text-left lg:text-right mono-label space-y-2 mt-8 lg:mt-0">
+              <p>
+                <span className="text-ink/50">ORIGIN:</span> {actor.origin}
+              </p>
+              <p>
+                <span className="text-ink/50">ACTIVE SINCE:</span> {actor.activeSince}
+              </p>
+              <p>
+                <span className="text-ink/50">CLASSIFICATION:</span> {actor.classification}
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* Mode Tabs */}
+      <div className="mx-auto max-w-[1600px] w-full px-6 lg:px-10 mt-12 relative z-10">
+        <div className="flex border-2 border-ink font-mono text-sm bg-paper w-fit">
+          <button
+            onClick={() => setActiveTab("dossier")}
+            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest ${
+              activeTab === "dossier"
+                ? "bg-ink text-paper border-b-4 border-ink"
+                : "bg-paper text-ink/60 hover:text-ink hover:bg-ink/5 border-b-4 border-transparent"
+            }`}
+          >
+            📄 BAU DOSSIER
+          </button>
+          <button
+            onClick={() => setActiveTab("interrogation")}
+            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest border-l-2 border-ink ${
+              activeTab === "interrogation"
+                ? "bg-danger text-paper border-b-4 border-danger"
+                : "bg-paper text-ink/60 hover:text-danger hover:bg-danger/5 border-b-4 border-transparent"
+            }`}
+          >
+            🎙️ POST-CAPTURE INTERROGATION
+          </button>
+        </div>
+      </div>
+
       {/* Main Content Pane */}
-      <section className="max-w-[1600px] mx-auto w-full px-6 lg:px-10 py-6 flex-1 relative z-10">
+      <section className="mx-auto max-w-[1600px] w-full px-6 lg:px-10 py-12 flex-1 relative z-10 mb-20">
         {activeTab === "dossier" ? (
           /* DOSSIER VIEW */
-          <div className="grid grid-cols-12 gap-8 font-mono text-xs">
-            {/* Left Column: Core Dossier Attributes */}
-            <div className="col-span-12 lg:col-span-4 space-y-6">
-              <div className="border-2 border-rule bg-card p-6 space-y-4 shadow-comic-dark">
-                <span className="mono-label text-danger font-bold">// BEHAVIORAL PROFILE</span>
-                <div className="space-y-3 divide-y-2 divide-rule">
-                  <div className="pt-2">
-                    <span className="text-muted-foreground block text-[10px]">PATIENCE LEVEL:</span>
-                    <span className="text-foreground font-bold">
-                      {actor.psychologicalProfile.patience}
-                    </span>
+          <div className="grid grid-cols-12 gap-8 md:gap-12">
+            {/* Left Column */}
+            <div className="col-span-12 lg:col-span-4 space-y-12">
+              <div>
+                <p className="mono-label !text-ink/60 border-b border-ink/30 pb-2 mb-4">
+                  // BEHAVIORAL PROFILE
+                </p>
+                <dl className="space-y-6 text-sm">
+                  <div>
+                    <dt className="mono-label !text-ink/50">PATIENCE LEVEL</dt>
+                    <dd className="font-bold text-lg mt-1">{actor.psychologicalProfile.patience}</dd>
                   </div>
-                  <div className="pt-2">
-                    <span className="text-muted-foreground block text-[10px]">EGO STRUCTURE:</span>
-                    <span className="text-foreground font-bold">
-                      {actor.psychologicalProfile.ego}
-                    </span>
+                  <div className="hairline !bg-ink/20" />
+                  <div>
+                    <dt className="mono-label !text-ink/50">EGO STRUCTURE</dt>
+                    <dd className="font-bold text-lg mt-1">{actor.psychologicalProfile.ego}</dd>
                   </div>
-                  <div className="pt-2">
-                    <span className="text-muted-foreground block text-[10px]">RISK TOLERANCE:</span>
-                    <span className="text-foreground font-bold">
+                  <div className="hairline !bg-ink/20" />
+                  <div>
+                    <dt className="mono-label !text-ink/50">RISK TOLERANCE</dt>
+                    <dd className="font-bold text-lg mt-1 text-danger">
                       {actor.psychologicalProfile.riskTolerance}
-                    </span>
+                    </dd>
                   </div>
-                </div>
+                </dl>
               </div>
 
-              <div className="border-2 border-rule bg-card p-6 space-y-4 shadow-comic-dark">
-                <span className="mono-label text-accent font-bold">// WHAT STOPS THEM</span>
-                <ul className="space-y-2 list-disc list-inside text-foreground/80">
+              <div className="border-2 border-ink p-8 shadow-brutal-ink bg-paper">
+                <p className="mono-label text-danger mb-4">// WHAT STOPS THEM</p>
+                <ul className="space-y-3 font-serif text-lg leading-snug">
                   {actor.whatStopsThem.map((item, idx) => (
-                    <li key={idx} className="leading-snug">
-                      {item}
+                    <li key={idx} className="flex gap-3">
+                      <span className="text-danger select-none">■</span>
+                      <span>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
 
-            {/* Right Column: Key Insight & Operations */}
-            <div className="col-span-12 lg:col-span-8 space-y-6">
-              <div className="border-2 border-danger/60 bg-danger/5 p-6 space-y-3 shadow-comic-sm">
-                <span className="mono-label text-danger font-bold">
-                  THE KEY INSIGHT (MINDHUNTER BAU ANALYSIS)
-                </span>
-                <p className="font-serif italic text-lg text-foreground leading-relaxed">
-                  "{actor.psychologicalProfile.keyInsight}"
-                </p>
-              </div>
-
+            {/* Right Column */}
+            <div className="col-span-12 lg:col-span-8 space-y-12">
               {/* Known Operations */}
-              <div className="border-2 border-rule bg-card p-6 space-y-4 shadow-comic-dark">
-                <span className="mono-label text-muted-foreground">// HISTORICAL OPERATIONS</span>
-                <div className="space-y-4">
+              <div>
+                <p className="mono-label !text-ink/60 border-b border-ink/30 pb-2 mb-6">
+                  // HISTORICAL OPERATIONS
+                </p>
+                <div className="space-y-6">
                   {actor.knownOperations.map((op, idx) => (
-                    <div key={idx} className="border-b-2 border-rule pb-3 last:border-b-0">
-                      <div className="flex justify-between items-baseline">
-                        <span className="font-bold text-accent text-sm">{op.name}</span>
-                        <span className="text-muted-foreground text-[10px]">{op.year}</span>
+                    <div key={idx} className="group border-2 border-transparent hover:border-ink p-4 transition-all">
+                      <div className="flex justify-between items-baseline mb-2">
+                        <h4 className="display text-3xl group-hover:text-danger transition-colors">
+                          {op.name}
+                        </h4>
+                        <span className="mono-label !text-ink/50">{op.year}</span>
                       </div>
-                      <p className="text-foreground/80 mt-1 text-xs">{op.impact}</p>
+                      <p className="font-serif italic text-xl text-ink/80 leading-relaxed">
+                        {op.impact}
+                      </p>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Greatest Failure */}
-              <div className="border-2 border-rule bg-card p-6 space-y-2 shadow-comic-dark">
-                <span className="mono-label text-danger font-bold">
+              <div className="border-t-2 border-ink pt-12">
+                <p className="mono-label text-danger mb-4">
                   // GREATEST FAILURE / HOW THEY GOT CAUGHT
-                </span>
-                <p className="text-foreground/90 leading-relaxed">{actor.greatestFailure}</p>
+                </p>
+                <p className="font-serif text-2xl leading-relaxed text-ink/90 italic">
+                  {actor.greatestFailure}
+                </p>
               </div>
             </div>
           </div>
         ) : (
           /* INTERROGATION ROOM VIEW */
-          <div className="border-2 border-danger bg-card p-6 space-y-6 font-mono text-xs shadow-comic-dark relative">
+          <div className="border-4 border-ink bg-paper shadow-brutal-ink relative max-w-5xl">
             {/* Top Bar: Rec Indicator */}
-            <div className="flex items-center justify-between border-b-2 border-rule pb-4">
-              <div className="flex items-center gap-3">
-                <span className="size-2.5 bg-danger animate-pulse" />
-                <span className="mono-label text-danger font-bold">
-                  ● REC {formatRecTime(recordingSeconds)} // POST-ARREST INTERVIEW ROOM
+            <div className="flex flex-wrap items-center justify-between border-b-4 border-ink p-4 bg-ink text-paper">
+              <div className="flex items-center gap-4">
+                <span className="size-3 bg-danger rounded-full animate-pulse shadow-[0_0_8px_#ef4444]" />
+                <span className="mono-label text-danger tracking-widest font-bold">
+                  REC {formatRecTime(recordingSeconds)} // POST-ARREST INTERVIEW
                 </span>
               </div>
-              <span className="text-muted-foreground text-[10px]">
-                SUBJECT: {actor.interviewContext.characterName}
+              <span className="mono-label text-paper/60">
+                SUBJECT: {actor.interviewContext.characterName.toUpperCase()}
               </span>
             </div>
 
             {/* Conversation Log Box */}
-            <div className="h-[450px] overflow-y-auto space-y-4 p-4 bg-black border-2 border-rule scrollbar-none">
+            <div className="h-[550px] overflow-y-auto space-y-6 p-6 md:p-10 bg-[#f8f5f0] scrollbar-none font-mono">
               {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground space-y-2">
-                  <span className="text-2xl">🎙️</span>
-                  <p className="font-bold text-foreground">INTERROGATION SESSION READY</p>
-                  <p className="text-[10px] max-w-md">
-                    Select a suggested question below or type a question to interview the captured
-                    threat actor regarding motives and decisions.
+                <div className="h-full flex flex-col items-center justify-center text-center text-ink/50 space-y-4">
+                  <div className="text-6xl mb-2 grayscale opacity-50">🎙️</div>
+                  <p className="display text-3xl text-ink uppercase">SESSION READY</p>
+                  <p className="font-serif text-xl italic max-w-md">
+                    Select a suggested question below or type a query to interrogate the captured
+                    threat actor.
                   </p>
                 </div>
               ) : (
                 messages.map((m, idx) => (
                   <div
                     key={idx}
-                    className={`flex flex-col space-y-1 ${
+                    className={`flex flex-col space-y-2 ${
                       m.sender === "interrogator" ? "items-end" : "items-start"
                     }`}
                   >
-                    <span className="text-[9px] text-muted-foreground">
-                      {m.sender === "interrogator" ? "SENIOR RESEARCHER" : actor.name} ·{" "}
+                    <span className="mono-label text-[10px] text-ink/50 px-1">
+                      {m.sender === "interrogator" ? "SENIOR RESEARCHER" : actor.name.toUpperCase()} ·{" "}
                       {m.timestamp}
                     </span>
                     <div
-                      className={`max-w-2xl p-4 leading-relaxed whitespace-pre-wrap ${
+                      className={`max-w-3xl p-5 leading-relaxed whitespace-pre-wrap text-sm md:text-base border-2 ${
                         m.sender === "interrogator"
-                          ? "bg-accent/15 border-2 border-accent text-accent font-bold shadow-comic-sm"
-                          : "bg-danger/10 border-2 border-danger text-foreground shadow-comic-sm"
+                          ? "bg-paper border-ink text-ink shadow-[4px_4px_0_0_#1a1a1a]"
+                          : "bg-ink border-ink text-paper shadow-[4px_4px_0_0_#ef4444]"
                       }`}
                     >
                       {m.text}
@@ -319,58 +341,57 @@ function ThreatProfileDetail() {
               )}
 
               {isLoading && (
-                <div className="flex items-center gap-2 text-danger animate-pulse py-2 font-bold">
+                <div className="flex items-center gap-3 text-danger animate-pulse py-4 font-bold mono-label">
                   <span className="size-2 bg-danger" />
-                  <span>{actor.name} IS RESPONDING...</span>
+                  <span>{actor.name.toUpperCase()} IS RESPONDING...</span>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Suggested Prompt Buttons */}
-            <div className="space-y-2">
-              <span className="mono-label text-[10px] text-muted-foreground">
-                // SUGGESTED INTERROGATION PROMPTS
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {actor.interviewContext.suggestedQuestions.map((q, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleAsk(q)}
-                    disabled={isLoading}
-                    className="border-2 border-rule hover:border-danger bg-black px-3 py-1.5 text-[11px] text-foreground/80 hover:text-danger transition-colors text-left cursor-pointer"
-                  >
-                    "{q}"
-                  </button>
-                ))}
+            {/* Input & Suggested Prompts Area */}
+            <div className="border-t-4 border-ink p-6 md:p-8 bg-paper">
+              <div className="mb-6 space-y-3">
+                <span className="mono-label text-ink/50">// SUGGESTED INTERROGATION PROMPTS</span>
+                <div className="flex flex-wrap gap-3">
+                  {actor.interviewContext.suggestedQuestions.map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleAsk(q)}
+                      disabled={isLoading}
+                      className="border-2 border-ink/30 hover:border-ink bg-transparent px-4 py-2 mono-label text-[11px] text-ink/70 hover:text-ink transition-all text-left cursor-pointer shadow-none hover:shadow-[2px_2px_0_0_#1a1a1a]"
+                    >
+                      "{q}"
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Input Box */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleAsk();
-              }}
-              className="flex border-2 border-danger bg-black"
-            >
-              <input
-                type="text"
-                value={questionInput}
-                onChange={(e) => setQuestionInput(e.target.value)}
-                disabled={isLoading}
-                placeholder={`Ask ${actor.name} about motives, timing, or target choices...`}
-                aria-label="Question for threat actor interrogation"
-                className="flex-1 bg-transparent px-4 py-3 text-xs text-foreground focus:outline-none placeholder:text-muted-foreground font-mono"
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !questionInput.trim()}
-                className="bg-danger text-white px-6 font-bold text-xs uppercase hover:bg-danger/90 transition-colors disabled:opacity-30 cursor-pointer"
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAsk();
+                }}
+                className="flex border-4 border-ink shadow-[6px_6px_0_0_#1a1a1a]"
               >
-                ASK →
-              </button>
-            </form>
+                <input
+                  type="text"
+                  value={questionInput}
+                  onChange={(e) => setQuestionInput(e.target.value)}
+                  disabled={isLoading}
+                  placeholder={`Ask ${actor.name} about motives, timing, or target choices...`}
+                  aria-label="Question for threat actor interrogation"
+                  className="flex-1 bg-transparent px-6 py-4 text-sm md:text-base text-ink focus:outline-none placeholder:text-ink/40 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !questionInput.trim()}
+                  className="bg-danger text-paper px-8 md:px-12 font-bold display tracking-wider text-xl md:text-2xl hover:bg-danger/90 transition-colors disabled:opacity-30 cursor-pointer border-l-4 border-ink flex items-center justify-center"
+                >
+                  ASK
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </section>

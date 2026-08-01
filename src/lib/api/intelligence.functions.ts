@@ -32,7 +32,7 @@ export const generateAndStoreAIAttack = createServerFn({ method: "POST" })
     const operator = await getSessionOperator(token);
     const ipKey = operator?.callsign || "guest";
 
-    const rl = checkRateLimit(`ai_attack:${ipKey}`, LIMITS.ai_terminal || 10);
+    const rl = checkRateLimit(`ai_attack:${ipKey}`, LIMITS.ai_terminal);
     if (!rl.allowed) {
       throw new Error("Rate limit exceeded for AI attack generation.");
     }
@@ -147,7 +147,7 @@ Return strict JSON without markdown formatting.`,
         decisionsJson: JSON.stringify(parsedScenario.decisions || []),
         isPublic: true,
         createdAt: new Date().toISOString(),
-      });
+      } as any);
 
       await db.insert(auditLogs).values({
         id: crypto.randomUUID(),
@@ -162,10 +162,10 @@ Return strict JSON without markdown formatting.`,
     return {
       scenarioId,
       sector,
-      name: parsedScenario.name || `AI Scenario: ${adversaryName}`,
-      description: parsedScenario.description || prompt,
-      events: parsedScenario.events || [],
-      decisions: parsedScenario.decisions || [],
+      name: (parsedScenario.name as string) || `AI Scenario: ${adversaryName}`,
+      description: (parsedScenario.description as string) || prompt,
+      events: (parsedScenario.events as any[]) || [],
+      decisions: (parsedScenario.decisions as any[]) || [],
       savedToDb: saveToDb,
     };
   });

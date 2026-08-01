@@ -14,7 +14,8 @@ import {
   Crosshair,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useOperatorSession, loginOperator, registerOperator } from "@features/auth";
+import { useOperatorSession } from "@/lib/auth-store";
+import { loginOperator, registerOperator } from "@/lib/api/auth.functions";
 import { CyberMatrixTrigger } from "./CyberMatrixTrigger";
 
 type AuthMode = "login" | "register";

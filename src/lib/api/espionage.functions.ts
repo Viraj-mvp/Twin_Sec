@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
 import { z } from "zod";
 
-import { createAiGatewayProvider } from "../ai-gateway.server";
+import { createOpenRouterGateway, createGeminiGateway, createGroqGateway } from "../ai-gateway.server";
 
 // AI calls have NO built-in timeout (Vercel AI SDK). Cap them so the
 // espionage page can never freeze on a slow/free-tier provider.
@@ -230,7 +230,8 @@ export const generateEspionageBriefing = createServerFn({ method: "POST" })
   .validator((raw: unknown) => Input.parse(raw))
   .handler(async ({ data }) => {
     const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("OPENROUTER_API_KEY is not configured");
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!key && !groqKey) throw new Error("OPENROUTER_API_KEY or GROQ_API_KEY is not configured");
 
     const auditEvents: Array<{ stage: string; rule: string; detail: string }> = [];
 
@@ -249,8 +250,9 @@ export const generateEspionageBriefing = createServerFn({ method: "POST" })
       detail: `Enum sector=${data.sector}, chain=${data.chain}, intensity=${data.intensity}; length caps enforced.`,
     });
 
-    const gateway = createAiGatewayProvider(key);
-    const model = gateway("qwen/qwen3-next-80b-a3b-instruct:free");
+    // We use Groq as the fast AI for generation
+    const gateway = groqKey ? createGroqGateway(groqKey) : createOpenRouterGateway(key!);
+    const model = gateway(groqKey ? "llama-3.3-70b-versatile" : "google/gemini-2.0-flash-lite-preview-02-05:free");
 
     const phases = CHAIN_PHASES[data.chain];
 
@@ -372,10 +374,12 @@ export const generateDynamicAttack = createServerFn({ method: "POST" })
   .validator((raw: unknown) => DynamicAttackInput.parse(raw))
   .handler(async ({ data }) => {
     const key = process.env.OPENROUTER_API_KEY;
-    if (!key) throw new Error("OPENROUTER_API_KEY is not configured");
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!key && !groqKey) throw new Error("OPENROUTER_API_KEY or GROQ_API_KEY is not configured");
 
-    const gateway = createAiGatewayProvider(key);
-    const model = gateway("qwen/qwen3-next-80b-a3b-instruct:free");
+    // Use Groq for dynamic attack hints
+    const gateway = groqKey ? createGroqGateway(groqKey) : createOpenRouterGateway(key!);
+    const model = gateway(groqKey ? "llama-3.3-70b-versatile" : "google/gemini-2.0-flash-lite-preview-02-05:free");
 
     const prompt = `You are TWINSEC/RAVEN, an AI adversary simulation engine. 
 Generate a hands-on cybersecurity training hint and a short defanged CLI script/command template for:
@@ -435,8 +439,9 @@ export const interrogateThreatActor = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const key = process.env.OPENROUTER_API_KEY;
 
+    const geminiKey = process.env.GEMINI_API_KEY;
     // Fallback response if no API key is set
-    if (!key) {
+    if (!key && !geminiKey) {
       const fallbackResponses: Record<string, string> = {
         sandworm:
           '[RESEARCHER NOTE: Subject displays calculated military discipline]\n\n"We do not act on impulse. Winter is not just weather; it is a force multiplier. When temperature drops to -10°C, the grid is already under thermal stress. The timing was calculated to force maximum political realization. You ask about consequences? We follow military objectives."',
@@ -455,17 +460,19 @@ export const interrogateThreatActor = createServerFn({ method: "POST" })
       };
     }
 
-    const gateway = createAiGatewayProvider(key);
-    const model = gateway("qwen/qwen3-next-80b-a3b-instruct:free");
+    // We use Gemini specifically for the interrogation because it handles creative roleplay well
+    const gateway = geminiKey ? createGeminiGateway(geminiKey) : createOpenRouterGateway(key!);
+    const model = gateway(geminiKey ? "gemini-1.5-pro" : "google/gemini-2.0-flash-lite-preview-02-05:free");
 
     const systemPrompt = `You are roleplaying a CAPTURED threat actor (${data.actorName}) in a post-arrest FBI Mindhunter-style interrogation conducted by a senior ICS security researcher.
 
 RULES & CHARACTER:
-- You are captured and incarcerated. This is years after your operations. You are articulate, intelligent, and willing to discuss your MOTIVES, PSYCHOLOGY, and DECISIONS.
+- You are captured and incarcerated. This is years after your operations. You are articulate, intelligent, and willing to discuss your MOTIVES, PSYCHOLOGY, and DECISIONS in extreme detail.
 - NEVER reveal runnable exploit code, zero-day syntax, or real working credentials.
 - All IPs must be 203.0.113.X or 192.0.2.X documentation ranges.
 - Include a 1-line bracketed "[RESEARCHER NOTE: ...]" at the start of your answer analyzing your psychological state (e.g. ego, grievance, military rationale).
-- Tone: Quiet intensity, articulate, calm, slightly disturbing. Like a Mindhunter BAU interview.`;
+- Tone: Quiet intensity, articulate, calm, slightly disturbing. Like a Mindhunter BAU interview.
+- FORMAT REQUIREMENT: Your responses MUST be highly detailed and multi-paragraph (at least 3-4 paragraphs). Tell a story, explain the philosophy behind the attack, describe the environment, and elaborate deeply on how you viewed the defenders. Do not give short one-paragraph answers. Expand on your strategic rationale.`;
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },

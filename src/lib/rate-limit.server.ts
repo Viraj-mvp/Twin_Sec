@@ -28,7 +28,7 @@ export function checkRateLimit(
   const now = Date.now();
 
   // Evict expired buckets so the store can't leak memory.
-  for (const [k, v] of store) {
+  for (const [k, v] of Array.from(store.entries())) {
     if (now > v.resetAt) store.delete(k);
   }
 

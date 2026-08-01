@@ -39,3 +39,15 @@ data/
 *.njsproj
 *.sln
 *.sw?
+
+# AI Agents & Design Documents
+.cursorrules
+SKILL.md
+AGENTS.md
+RESEARCH_GROUNDING.md
+LOGO_PROMPT.md
+BRUTALIST_MINIMALIST_REDESIGN.md
+implementation_plan*
+digital-twin-security-reference.md
+docs/
+diagrams/

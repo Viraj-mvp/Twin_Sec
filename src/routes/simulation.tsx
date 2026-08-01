@@ -1592,12 +1592,22 @@ function SimulationPage() {
     "[*] Type 'help' for available CLI commands or 'scan' to query topology nodes.",
   ]);
   const [terminalInput, setTerminalInput] = useState("");
-  const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+  const dragStartRef = useRef<{
+    startX: number;
+    startY: number;
+    initX: number;
+    initY: number;
+  } | null>(null);
 
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    dragStartRef.current = { startX: clientX, startY: clientY, initX: terminalPos.x, initY: terminalPos.y };
+    dragStartRef.current = {
+      startX: clientX,
+      startY: clientY,
+      initX: terminalPos.x,
+      initY: terminalPos.y,
+    };
     setIsDragging(true);
   };
 
@@ -1796,32 +1806,44 @@ function SimulationPage() {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'isolate plc-3').");
       } else {
-        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
         if (targetNode) {
-          setIsolatedNodes(prev => new Set([...Array.from(prev), targetNode.id]));
+          setIsolatedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
           newLogs.push(`[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) QUARANTINED.`);
-          newLogs.push(`[*] Network segment isolated. Cascade propagation halted at ${targetNode.id}.`);
+          newLogs.push(
+            `[*] Network segment isolated. Cascade propagation halted at ${targetNode.id}.`,
+          );
         } else {
-          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`);
+          newLogs.push(
+            `[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`,
+          );
         }
       }
     } else if (cmd === "override") {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'override plc-7').");
       } else {
-        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
         if (targetNode) {
           newLogs.push(`[+] SUCCESS: Manual setpoint override issued to ${targetNode.id}.`);
           newLogs.push(`[*] Telemetry reset to nominal operational parameters.`);
         } else {
-          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`);
+          newLogs.push(
+            `[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`,
+          );
         }
       }
     } else if (cmd === "patch") {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Specify target node ID to patch (e.g. 'patch plc-3').");
       } else {
-        const targetNode = NODES.find(n => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg));
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
         if (targetNode) {
           newLogs.push(`[+] SUCCESS: Firmware attestation patch deployed to ${targetNode.id}.`);
         } else {
@@ -2381,7 +2403,9 @@ function SimulationPage() {
         <div className="mx-auto max-w-[1600px] space-y-8">
           <div className="flex flex-wrap items-baseline justify-between border-b border-rule pb-6">
             <div>
-              <p className="mono-label text-accent">SECTION 04 — THREAT DIAGNOSTICS & SIEM DETECTIONS</p>
+              <p className="mono-label text-accent">
+                SECTION 04 — THREAT DIAGNOSTICS & SIEM DETECTIONS
+              </p>
               <h3 className="display text-3xl sm:text-4xl lg:text-5xl mt-2">
                 Explainable AI & Live Threat Feed
               </h3>
@@ -2401,7 +2425,10 @@ function SimulationPage() {
                         type: "TELEMETRY_ANOMALY" as const,
                         sourceAssetId: EVENTS[activeIdx].node,
                         targetAssetId: EVENTS[activeIdx].node,
-                        severity: EVENTS[activeIdx].sev === "MEDIUM" ? "WARN" : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
+                        severity:
+                          EVENTS[activeIdx].sev === "MEDIUM"
+                            ? "WARN"
+                            : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
                         title: EVENTS[activeIdx].title,
                         description: EVENTS[activeIdx].desc,
                         data: {},
@@ -2471,10 +2498,7 @@ function SimulationPage() {
       )}
 
       {/* Floating Cyber Range CLI Terminal Trigger FAB */}
-      <TerminalFAB
-        isOpen={terminalOpen}
-        onToggle={() => setTerminalOpen(!terminalOpen)}
-      />
+      <TerminalFAB isOpen={terminalOpen} onToggle={() => setTerminalOpen(!terminalOpen)} />
 
       {/* Draggable Kali-style Cyber Range CLI Terminal */}
       <KaliTerminal

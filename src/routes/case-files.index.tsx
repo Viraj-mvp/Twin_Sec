@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CASE_FILES } from "@features/case-files";
-import { TwinSecLogo } from "@shared";
-import { CaseFileCard } from "@/components/casefile";
+import { CASE_FILES } from "@/data/case-files";
+import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { CaseFileCard } from "@/components/casefile/CaseFileCard";
 
-export const Route = createFileRoute("/case-files")({
+export const Route = createFileRoute("/case-files/")({
   head: () => ({
     meta: [
       { title: "TwinSec — Real ICS Attacks: Case Studies & Research Grounding" },

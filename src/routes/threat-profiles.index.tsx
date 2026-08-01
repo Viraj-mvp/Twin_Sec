@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { THREAT_ACTORS } from "@features/mindhunter";
-import { TwinSecLogo } from "@shared";
+import { THREAT_ACTORS } from "@/data/threat-actors";
+import { TwinSecLogo } from "@/components/TwinSecLogo";
 
-export const Route = createFileRoute("/threat-profiles")({
+export const Route = createFileRoute("/threat-profiles/")({
   head: () => ({
     meta: [
       { title: "TwinSec — The Mindhunter Module · Threat Actor Psychology" },
