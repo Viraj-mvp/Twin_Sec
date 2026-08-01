@@ -20,7 +20,7 @@ dist-ssr
 .env.*.local
 
 # Local database files
-data/
+/data/
 *.db
 *.db-shm
 *.db-wal
