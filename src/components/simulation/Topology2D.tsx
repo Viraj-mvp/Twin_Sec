@@ -5,6 +5,7 @@ interface Topology2DProps {
   nodes: readonly Node[] | Node[];
   edges: readonly Edge[] | Edge[];
   compromised: Set<string>;
+  blockedNodes?: Set<string>;
   selected: string | null;
   onSelect: (id: string, source?: "tap" | "long") => void;
   t: number;
@@ -18,6 +19,7 @@ export const Topology2D: React.FC<Topology2DProps> = ({
   nodes,
   edges,
   compromised,
+  blockedNodes = new Set<string>(),
   selected,
   onSelect,
   t,
@@ -84,27 +86,94 @@ export const Topology2D: React.FC<Topology2DProps> = ({
         >
           <path d="M 0 1 L 10 5 L 0 9 z" fill="oklch(0.45 0.02 240)" />
         </marker>
+        <marker
+          id="arrow-severed"
+          viewBox="0 0 10 10"
+          refX="6"
+          refY="5"
+          markerWidth="3"
+          markerHeight="3"
+          orient="auto-start-reverse"
+        >
+          <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+        </marker>
       </defs>
 
+      {/* EDGES */}
       {edges.map((e, i) => {
         const a = byId(e.from);
         const b = byId(e.to);
         if (!a || !b) return null;
-        const live = compromised.has(e.from) && compromised.has(e.to);
-        const activeFrom = compromised.has(e.from);
+
+        const isSevered = isolatedNodes.has(e.from) || isolatedNodes.has(e.to);
+        const live = !isSevered && compromised.has(e.from) && compromised.has(e.to);
+        const activeFrom = !isSevered && compromised.has(e.from);
+
+        const midX = (a.x + b.x) / 2;
+        const midY = (a.y + b.y) / 2;
+
         return (
           <g key={i}>
-            {/* Edge line with directional arrow marker */}
+            {/* Edge line */}
             <line
               x1={a.x}
               y1={a.y}
               x2={b.x}
               y2={b.y}
-              stroke={live ? "#bfff2e" : activeFrom ? "oklch(0.7 0.2 130)" : "oklch(0.35 0.01 240)"}
-              strokeWidth={live ? 0.35 : activeFrom ? 0.25 : 0.15}
-              markerEnd={live || activeFrom ? "url(#arrow-active)" : "url(#arrow-nominal)"}
+              stroke={
+                isSevered
+                  ? "#f59e0b"
+                  : live
+                    ? "#bfff2e"
+                    : activeFrom
+                      ? "oklch(0.7 0.2 130)"
+                      : "oklch(0.35 0.01 240)"
+              }
+              strokeWidth={live ? 0.35 : isSevered ? 0.22 : activeFrom ? 0.25 : 0.15}
+              strokeDasharray={isSevered ? "1.2 1.2" : undefined}
+              opacity={isSevered ? 0.55 : 1}
+              markerEnd={
+                isSevered
+                  ? "url(#arrow-severed)"
+                  : live || activeFrom
+                    ? "url(#arrow-active)"
+                    : "url(#arrow-nominal)"
+              }
               vectorEffect="non-scaling-stroke"
             />
+
+            {/* Severed Air-Gap Break Marker */}
+            {isSevered && (
+              <g transform={`translate(${midX}, ${midY})`}>
+                <circle
+                  r={1.2}
+                  fill="#0f0f12"
+                  stroke="#f59e0b"
+                  strokeWidth={0.2}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={-0.6}
+                  y1={-0.6}
+                  x2={0.6}
+                  y2={0.6}
+                  stroke="#f59e0b"
+                  strokeWidth={0.25}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line
+                  x1={0.6}
+                  y1={-0.6}
+                  x2={-0.6}
+                  y2={0.6}
+                  stroke="#f59e0b"
+                  strokeWidth={0.25}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            )}
+
+            {/* Active Compromise Moving Packet Pulses */}
             {live && (
               <line
                 x1={a.x}
@@ -123,16 +192,16 @@ export const Topology2D: React.FC<Topology2DProps> = ({
         );
       })}
 
+      {/* NODES */}
       {nodes.map((n) => {
+        const isI = isolatedNodes.has(n.id);
         const isC = compromised.has(n.id);
+        const isBlocked = blockedNodes.has(n.id) && !isC && !isI;
         const isS = selected === n.id;
         const isA = activeNode === n.id;
         const isP = pressed === n.id;
-        const isI = isolatedNodes.has(n.id);
         const isCmdActive = commandActiveNode === n.id;
         const off = nodeOffsets[n.id] || { dx: 0, dy: 0 };
-        const nx = n.x + off.dx;
-        const ny = n.y + off.dy;
 
         return (
           <g
@@ -146,7 +215,13 @@ export const Topology2D: React.FC<Topology2DProps> = ({
             role="button"
             tabIndex={0}
             aria-label={`${n.label} — ${n.kind}. ${
-              isC ? "Compromised" : isI ? "Isolated" : "Nominal"
+              isI
+                ? "Air-Gapped / Isolated"
+                : isC
+                  ? "Compromised"
+                  : isBlocked
+                    ? "Protected by Air-Gap"
+                    : "Nominal"
             }. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
             aria-pressed={isS}
             onPointerDown={(e) => {
@@ -176,6 +251,7 @@ export const Topology2D: React.FC<Topology2DProps> = ({
                 className="animate-ping"
               />
             )}
+
             {/* Enlarged hit target */}
             <rect x={n.x - 5} y={n.y - 5} width={10} height={10} fill="transparent" />
 
@@ -218,6 +294,7 @@ export const Topology2D: React.FC<Topology2DProps> = ({
               </circle>
             )}
 
+            {/* Active timeline focus ring */}
             {isA && (
               <circle
                 cx={n.x}
@@ -240,6 +317,7 @@ export const Topology2D: React.FC<Topology2DProps> = ({
               </circle>
             )}
 
+            {/* Compromised alert ring */}
             {isC && (
               <circle
                 cx={n.x}
@@ -253,40 +331,60 @@ export const Topology2D: React.FC<Topology2DProps> = ({
               />
             )}
 
+            {/* Air-gap / Isolated boundary halo */}
             {isI && (
+              <circle
+                cx={n.x}
+                cy={n.y}
+                r={3.4}
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth={0.35}
+                strokeDasharray="0.8 0.5"
+                opacity={0.9}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+
+            {/* Blocked / Protected shield halo */}
+            {isBlocked && (
               <circle
                 cx={n.x}
                 cy={n.y}
                 r={3.2}
                 fill="none"
-                stroke="oklch(0.7 0.25 230)"
-                strokeWidth={0.4}
-                strokeDasharray="0.8 0.4"
-                opacity={0.8}
+                stroke="#38bdf8"
+                strokeWidth={0.25}
+                opacity={0.7}
                 vectorEffect="non-scaling-stroke"
               />
             )}
 
+            {/* Main Node Rect */}
             <rect
               x={n.x - 1.4}
               y={n.y - 1.4}
               width={2.8}
               height={2.8}
               fill={
-                isC
-                  ? "oklch(0.86 0.24 125)"
-                  : isI
-                    ? "oklch(0.55 0.25 230)"
-                    : "oklch(0.14 0.005 240)"
+                isI
+                  ? "oklch(0.25 0.08 65)"
+                  : isC
+                    ? "oklch(0.86 0.24 125)"
+                    : isBlocked
+                      ? "oklch(0.25 0.08 210)"
+                      : "oklch(0.14 0.005 240)"
               }
               stroke={
                 isS
                   ? "oklch(0.97 0.005 90)"
-                  : isC
-                    ? "oklch(0.97 0.005 90)"
-                    : isI
-                      ? "oklch(0.7 0.25 230)"
-                      : "oklch(0.55 0.02 240)"
+                  : isI
+                    ? "#f59e0b"
+                    : isC
+                      ? "oklch(0.97 0.005 90)"
+                      : isBlocked
+                        ? "#38bdf8"
+                        : "oklch(0.55 0.02 240)"
               }
               strokeWidth={isS ? 0.5 : 0.2}
               vectorEffect="non-scaling-stroke"
@@ -300,29 +398,35 @@ export const Topology2D: React.FC<Topology2DProps> = ({
         );
       })}
 
-      {nodes.map((n: Node) => (
-        <g key={n.id + "-l"}>
-          <text
-            x={n.x + 2.2}
-            y={n.y - 1.6}
-            fill="oklch(0.97 0.005 90)"
-            fontSize="1.6"
-            fontFamily="JetBrains Mono, monospace"
-            opacity={selected === n.id || compromised.has(n.id) ? 1 : 0.55}
-          >
-            {n.label}
-          </text>
-          <text
-            x={n.x + 2.2}
-            y={n.y + 0.4}
-            fill="oklch(0.65 0.02 240)"
-            fontSize="1.1"
-            fontFamily="JetBrains Mono, monospace"
-          >
-            {n.kind.toUpperCase()}
-          </text>
-        </g>
-      ))}
+      {/* NODE LABELS */}
+      {nodes.map((n: Node) => {
+        const isI = isolatedNodes.has(n.id);
+        const isC = compromised.has(n.id);
+        const isBlocked = blockedNodes.has(n.id) && !isC && !isI;
+        return (
+          <g key={n.id + "-l"}>
+            <text
+              x={n.x + 2.2}
+              y={n.y - 1.6}
+              fill={isI ? "#f59e0b" : isBlocked ? "#38bdf8" : "oklch(0.97 0.005 90)"}
+              fontSize="1.6"
+              fontFamily="JetBrains Mono, monospace"
+              opacity={selected === n.id || isC || isI ? 1 : 0.65}
+            >
+              {n.label}
+            </text>
+            <text
+              x={n.x + 2.2}
+              y={n.y + 0.4}
+              fill={isI ? "#fbbf24" : isBlocked ? "#7dd3fc" : "oklch(0.65 0.02 240)"}
+              fontSize="1.1"
+              fontFamily="JetBrains Mono, monospace"
+            >
+              {isI ? "AIR-GAPPED" : isBlocked ? "PROTECTED" : n.kind.toUpperCase()}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 };

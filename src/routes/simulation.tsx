@@ -9,6 +9,11 @@ import { Topology2D } from "@/components/simulation/Topology2D";
 import { ExplainableAIPanel } from "@/components/simulation/ExplainableAIPanel";
 import { SigmaRuleExport } from "@/components/simulation/SigmaRuleExport";
 import { CISAThreatFeed } from "@/components/simulation/CISAThreatFeed";
+import {
+  evaluateSimulationState,
+  type SimulationGraphState,
+  type EnrichedEvent,
+} from "@/lib/simulation-graph";
 
 const SECTOR_IDS = [
   "power",
@@ -1583,6 +1588,8 @@ function SimulationPage() {
   const [terminalPos, setTerminalPos] = useState({ x: 24, y: 24 });
   const [isDragging, setIsDragging] = useState(false);
   const [isolatedNodes, setIsolatedNodes] = useState<Set<string>>(new Set());
+  const [patchedNodes, setPatchedNodes] = useState<Set<string>>(new Set());
+  const [firstActionTime, setFirstActionTime] = useState<number | null>(null);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([
     "┌──(kali㏌twinsec)-[~/cyber-range]",
     "└─$ twinsec-cli --init --sector=" + (sector || "power").toUpperCase(),
@@ -1740,20 +1747,49 @@ function SimulationPage() {
     }
   }, [activeIdx, choices]);
 
-  const compromisedNodes = useMemo(() => {
-    const s = new Set<string>();
-    for (let i = 0; i <= activeIdx; i++) s.add(EVENTS[i].node);
-    return s;
-  }, [activeIdx]);
+  // Core Simulation Graph Evaluation Engine (Air-Gap Reachability, MTTD/MTTR, Physics, Cascade Containment)
+  const graphState = useMemo<SimulationGraphState>(() => {
+    return evaluateSimulationState({
+      t,
+      nodes: NODES,
+      edges: EDGES,
+      events: EVENTS,
+      decisions: DECISIONS,
+      choices,
+      isolatedNodes,
+      patchedNodes,
+      firstActionTime,
+      sector,
+      totalTime: TOTAL,
+    });
+  }, [t, choices, isolatedNodes, patchedNodes, firstActionTime, sector]);
 
-  const outcome = useMemo(() => computeOutcome(choices), [choices]);
+  const compromisedNodes = graphState.compromisedNodes;
+  const blockedNodes = graphState.blockedNodes;
+  const activeEvents = graphState.activeEvents;
+  const speedHz = graphState.physics.speedHz;
+  const bearingC = graphState.physics.bearingC;
+  const pressure = graphState.physics.pressure;
+
+  const outcome = useMemo(
+    () => ({
+      mw: graphState.mwShed,
+      impactLabel: graphState.impactLabel,
+      impactFormatted: graphState.impactFormatted,
+      duration: graphState.durationText,
+      alarms: graphState.alarmsText,
+      mttd: graphState.mttdFormatted,
+      mttr: graphState.mttrFormatted,
+      cost: graphState.costFormatted,
+      branch: graphState.outcomeBranch,
+      dossierId: graphState.dossierId,
+      narrative: graphState.narrative,
+      physicsMul: graphState.physicsMul,
+    }),
+    [graphState],
+  );
 
   const activeNode = selected ? (NODES.find((n) => n.id === selected) ?? null) : null;
-
-  const phase = Math.min(1, t / TOTAL);
-  const speedHz = 50 + Math.sin(t / 40) * 0.4 + phase * 1.8 * outcome.physicsMul;
-  const bearingC = 62 + phase * 38 * outcome.physicsMul + Math.sin(t / 9) * 1.2;
-  const pressure = 8.2 - phase * 0.9 * outcome.physicsMul + Math.sin(t / 15) * 0.05;
 
   const restart = useCallback(() => {
     setT(0);
@@ -1763,6 +1799,8 @@ function SimulationPage() {
     setInteractions([]);
     setActiveDecision(null);
     setIsolatedNodes(new Set());
+    setPatchedNodes(new Set());
+    setFirstActionTime(null);
     setPlaying(true);
     if (typeof window !== "undefined" && window.location.hash) {
       history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -1787,11 +1825,12 @@ function SimulationPage() {
     } else if (cmd === "help" || cmd === "guide") {
       newLogs.push(
         "[+] TWINSEC CLI COMMAND REFERENCE:",
-        "    scan [node_id]       - Query SCADA topology nodes & open ICS ports",
-        "    isolate <node_id>    - Quarantine PLC node from SCADA network",
+        "    scan [node_id]       - Query SCADA topology nodes, air-gap status & open ICS ports",
+        "    isolate <node_id>    - Quarantine/Air-gap PLC node from OT bus to sever attack cascade",
+        "    reconnect <node_id>  - Reconnect isolated node back to OT industrial fieldbus",
+        "    patch <node_id>      - Apply firmware cryptographic attestation / ladder logic patch",
         "    override <node_id>   - Send manual setpoint override to restore nominal telemetry",
-        "    patch <node_id>      - Apply firmware patch or PLC ladder logic attestation",
-        "    status               - Query live physics state (Hz, °C, bar)",
+        "    status               - Query live physics state (Hz, °C, bar), MTTD, MTTR & containment",
         "    clear                - Clear terminal console",
       );
     } else if (cmd === "scan") {
@@ -1799,8 +1838,20 @@ function SimulationPage() {
       NODES.forEach((n) => {
         const isComp = compromisedNodes.has(n.id);
         const isIso = isolatedNodes.has(n.id);
-        const statusStr = isIso ? "[ISOLATED]" : isComp ? "[COMPROMISED]" : "[NOMINAL]";
-        newLogs.push(`  - ${n.id} (${n.label}): ${statusStr} · Kind: ${n.kind.toUpperCase()}`);
+        const isBlock = blockedNodes.has(n.id);
+        const isPatched = patchedNodes.has(n.id);
+        const statusStr = isIso
+          ? "[AIR-GAPPED/ISOLATED]"
+          : isComp
+            ? "[COMPROMISED]"
+            : isBlock
+              ? "[PROTECTED (AIR-GAP)]"
+              : isPatched
+                ? "[PATCHED]"
+                : "[NOMINAL]";
+        newLogs.push(
+          `  - ${n.id} (${n.label}): ${statusStr} · Ring ${n.ring} · ${n.kind.toUpperCase()}`,
+        );
       });
     } else if (cmd === "isolate") {
       if (!targetArg) {
@@ -1811,14 +1862,35 @@ function SimulationPage() {
         );
         if (targetNode) {
           setIsolatedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
+          if (firstActionTime === null) setFirstActionTime(t);
           newLogs.push(`[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) QUARANTINED.`);
           newLogs.push(
-            `[*] Network segment isolated. Cascade propagation halted at ${targetNode.id}.`,
+            `[*] OT routing table updated. Air-gap barrier engaged. Downstream lateral movement severed.`,
           );
         } else {
           newLogs.push(
             `[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`,
           );
+        }
+      }
+    } else if (cmd === "reconnect" || cmd === "unisolate") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Specify node ID to reconnect (e.g. 'reconnect plc-3').");
+      } else {
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
+        if (targetNode) {
+          setIsolatedNodes((prev) => {
+            const next = new Set(prev);
+            next.delete(targetNode.id);
+            return next;
+          });
+          newLogs.push(
+            `[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) RECONNECTED to OT bus.`,
+          );
+        } else {
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'.`);
         }
       }
     } else if (cmd === "override") {
@@ -1829,6 +1901,7 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
+          if (firstActionTime === null) setFirstActionTime(t);
           newLogs.push(`[+] SUCCESS: Manual setpoint override issued to ${targetNode.id}.`);
           newLogs.push(`[*] Telemetry reset to nominal operational parameters.`);
         } else {
@@ -1845,17 +1918,30 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
-          newLogs.push(`[+] SUCCESS: Firmware attestation patch deployed to ${targetNode.id}.`);
+          setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
+          if (firstActionTime === null) setFirstActionTime(t);
+          newLogs.push(
+            `[+] SUCCESS: Firmware cryptographic attestation patch deployed to ${targetNode.id}.`,
+          );
+          newLogs.push(
+            `[*] Ladder logic integrity verified. Adversarial execution vectors blocked.`,
+          );
         } else {
           newLogs.push(`[!] ERROR: Unknown node '${targetArg}'.`);
         }
       }
     } else if (cmd === "status") {
-      newLogs.push(`[*] LIVE SCADA TELEMETRY:`);
-      newLogs.push(`    Rotor Speed:  ${speedHz.toFixed(2)} Hz`);
-      newLogs.push(`    Bearing Temp: ${bearingC.toFixed(1)} °C`);
-      newLogs.push(`    Feeder Press: ${pressure.toFixed(2)} bar`);
-      newLogs.push(`    Clock:        T+${fmt(t)}`);
+      newLogs.push(`[*] LIVE SCADA TELEMETRY & INCIDENT METRICS:`);
+      newLogs.push(`    Rotor Speed:      ${speedHz.toFixed(2)} Hz`);
+      newLogs.push(`    Bearing Temp:     ${bearingC.toFixed(1)} °C`);
+      newLogs.push(`    Feeder Press:     ${pressure.toFixed(2)} bar`);
+      newLogs.push(`    Simulation Clock: T+${fmt(t)}`);
+      newLogs.push(`    MTTD (Detection): ${graphState.mttdFormatted}`);
+      newLogs.push(`    MTTR (Recovery):  ${graphState.mttrFormatted}`);
+      newLogs.push(`    Branch Outcome:   ${graphState.outcomeBranch}`);
+      newLogs.push(`    Impact Shed:      ${graphState.mwShed} MW`);
+      newLogs.push(`    Air-Gapped Nodes: ${isolatedNodes.size}`);
+      newLogs.push(`    Protected Nodes:  ${blockedNodes.size}`);
     } else {
       newLogs.push(`[!] Command not recognized: '${raw}'. Type 'help' for available commands.`);
     }
@@ -1954,7 +2040,7 @@ function SimulationPage() {
       const stats: [string, string][] = [
         ["OPERATOR", "N. ARENS"],
         ["ADVERSARY", exercise.adversary],
-        ["MW SHED", `${outcome.mw}`],
+        [outcome.impactLabel, outcome.impactFormatted],
         ["MTTD", outcome.mttd],
         ["MTTR", outcome.mttr],
         ["COST", outcome.cost],
@@ -2088,7 +2174,7 @@ function SimulationPage() {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(48);
       pdf.setTextColor(fg);
-      pdf.text(`${outcome.mw} MW`, M, dy + 36);
+      pdf.text(outcome.mw === 0 ? "ZERO IMPACT" : `${outcome.impactFormatted}`, M, dy + 36);
       pdf.setTextColor(accent);
       pdf.setFontSize(20);
       pdf.text(outcome.duration, M, dy + 64);
@@ -2179,6 +2265,7 @@ function SimulationPage() {
             nodes={NODES}
             edges={EDGES}
             compromised={compromisedNodes}
+            blockedNodes={blockedNodes}
             isolatedNodes={isolatedNodes}
             selected={selected}
             onSelect={(id, source) => handleSelectNode(id, source)}
@@ -2287,45 +2374,118 @@ function SimulationPage() {
             </div>
 
             <ol className="mt-6 sm:mt-8">
-              {EVENTS.map((e, i) => {
+              {activeEvents.map((e, i) => {
                 const active = i === activeIdx;
                 const past = i < activeIdx;
                 const future = i > activeIdx;
+                const isBlocked =
+                  e.status === "BLOCKED_AIRGAP" ||
+                  e.status === "PREVENTED_UPSTREAM" ||
+                  e.status === "PATCHED";
+
                 return (
                   <li
                     key={i}
                     onClick={() => setT(e.t + 0.1)}
                     className={`grid grid-cols-[4.5rem_1.25rem_minmax(0,1fr)_auto] sm:grid-cols-[6rem_2rem_minmax(0,1fr)_auto] items-start gap-3 sm:gap-4 py-5 sm:py-6 border-b border-rule cursor-pointer transition-colors ${
                       active
-                        ? "bg-accent text-accent-foreground"
-                        : future
-                          ? "opacity-40 hover:opacity-100"
-                          : "hover:bg-muted/40"
+                        ? isBlocked
+                          ? "bg-amber-500/15 border-amber-500/40 text-foreground"
+                          : "bg-accent text-accent-foreground"
+                        : isBlocked && past
+                          ? "opacity-75 bg-muted/20 border-l-2 border-l-amber-400 pl-2"
+                          : future
+                            ? "opacity-40 hover:opacity-100"
+                            : "hover:bg-muted/40"
                     }`}
                   >
                     <span
-                      className={`font-mono text-xs sm:text-sm pt-1 ${active ? "text-accent-foreground" : "text-foreground/60"}`}
+                      className={`font-mono text-xs sm:text-sm pt-1 ${
+                        active
+                          ? isBlocked
+                            ? "text-amber-400 font-bold"
+                            : "text-accent-foreground"
+                          : "text-foreground/60"
+                      }`}
                     >
                       T+{fmt(e.t)}
                     </span>
                     <span className="flex justify-center pt-2">
                       <span
-                        className={`size-3 ${active ? "bg-accent-foreground" : past ? sevColor(e.sev) : "border border-rule bg-transparent"}`}
+                        className={`size-3 ${
+                          e.status === "BLOCKED_AIRGAP"
+                            ? "bg-amber-400 rotate-45"
+                            : e.status === "PREVENTED_UPSTREAM"
+                              ? "bg-sky-400 rounded-full"
+                              : e.status === "PATCHED"
+                                ? "bg-emerald-400"
+                                : active
+                                  ? "bg-accent-foreground"
+                                  : past
+                                    ? sevColor(e.sev)
+                                    : "border border-rule bg-transparent"
+                        }`}
                       />
                     </span>
                     <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p
+                          className={`mono-label truncate ${
+                            active
+                              ? isBlocked
+                                ? "!text-amber-400"
+                                : "!text-accent-foreground"
+                              : ""
+                          }`}
+                        >
+                          {e.tag} · {e.node.toUpperCase()}
+                        </p>
+                        {e.status === "BLOCKED_AIRGAP" && (
+                          <span className="mono-label text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/50">
+                            🛡️ AIR-GAP DEFENSE
+                          </span>
+                        )}
+                        {e.status === "PREVENTED_UPSTREAM" && (
+                          <span className="mono-label text-[10px] px-2 py-0.5 bg-sky-500/20 text-sky-400 border border-sky-500/50">
+                            🔒 BLOCKED UPSTREAM
+                          </span>
+                        )}
+                        {e.status === "PATCHED" && (
+                          <span className="mono-label text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">
+                            ✅ PATCHED / ATTESTED
+                          </span>
+                        )}
+                      </div>
                       <p
-                        className={`mono-label truncate ${active ? "!text-accent-foreground" : ""}`}
+                        className={`font-serif text-lg sm:text-xl mt-1 leading-snug ${isBlocked && past ? "line-through opacity-70" : ""}`}
                       >
-                        {e.tag} · {e.node.toUpperCase()}
+                        {e.title}
                       </p>
-                      <p className="font-serif text-lg sm:text-xl mt-1 leading-snug">{e.title}</p>
                       {active && (
-                        <p className="font-mono text-xs mt-3 max-w-xl leading-relaxed">{e.desc}</p>
+                        <div className="mt-3 space-y-2">
+                          <p className="font-mono text-xs max-w-xl leading-relaxed">{e.desc}</p>
+                          {e.statusDetail && (
+                            <p className="font-mono text-xs text-amber-300 bg-amber-950/40 p-2 border border-amber-500/30 max-w-xl">
+                              {e.statusDetail}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <span className={`mono-label pt-1 ${active ? "!text-accent-foreground" : ""}`}>
-                      {e.sev}
+                    <span
+                      className={`mono-label pt-1 ${
+                        e.status === "BLOCKED_AIRGAP"
+                          ? "!text-amber-400 font-bold"
+                          : e.status === "PREVENTED_UPSTREAM"
+                            ? "!text-sky-400 font-bold"
+                            : e.status === "PATCHED"
+                              ? "!text-emerald-400 font-bold"
+                              : active
+                                ? "!text-accent-foreground"
+                                : ""
+                      }`}
+                    >
+                      {isBlocked ? "BLOCKED" : e.sev}
                     </span>
                   </li>
                 );
@@ -2468,7 +2628,9 @@ function SimulationPage() {
             <p className="mono-label text-accent">BRANCH · {outcome.branch}</p>
           </div>
           <h2 className="display text-[14vw] sm:text-[12vw] lg:text-[160px] leading-[0.85] mt-5 sm:mt-6">
-            {outcome.mw} MW SHED.
+            {outcome.mw === 0
+              ? "ZERO LOAD SHED."
+              : `${outcome.impactFormatted} ${outcome.impactLabel}.`}
             <br />
             <span className="text-accent">{outcome.duration}.</span>
             <br />
@@ -2522,6 +2684,8 @@ function SimulationPage() {
           onClose={() => setSelected(null)}
           compromised={compromisedNodes.has(activeNode.id)}
           isIsolated={isolatedNodes.has(activeNode.id)}
+          isBlocked={blockedNodes.has(activeNode.id)}
+          isPatched={patchedNodes.has(activeNode.id)}
           onToggleIsolate={() => {
             setIsolatedNodes((prev) => {
               const next = new Set(prev);
@@ -2530,13 +2694,29 @@ function SimulationPage() {
                 setShareToast(`ASSET ${activeNode.label} RECONNECTED TO OT BUS`);
               } else {
                 next.add(activeNode.id);
+                if (firstActionTime === null) setFirstActionTime(t);
                 setShareToast(`ASSET ${activeNode.label} ISOLATED (AIR-GAPPED)`);
               }
               return next;
             });
             window.setTimeout(() => setShareToast(null), 3000);
           }}
-          events={EVENTS.filter((e) => e.node === activeNode.id)}
+          onTogglePatch={() => {
+            setPatchedNodes((prev) => {
+              const next = new Set(prev);
+              if (next.has(activeNode.id)) {
+                next.delete(activeNode.id);
+                setShareToast(`ASSET ${activeNode.label} PATCH REVERTED`);
+              } else {
+                next.add(activeNode.id);
+                if (firstActionTime === null) setFirstActionTime(t);
+                setShareToast(`ASSET ${activeNode.label} FIRMWARE PATCHED`);
+              }
+              return next;
+            });
+            window.setTimeout(() => setShareToast(null), 3000);
+          }}
+          events={activeEvents.filter((e) => e.node === activeNode.id)}
           t={t}
           onJump={(jumpT) => {
             setT(jumpT);
@@ -3071,7 +3251,10 @@ function NodeOverlay({
   onClose,
   compromised,
   isIsolated,
+  isBlocked,
+  isPatched,
   onToggleIsolate,
+  onTogglePatch,
   events,
   t,
   onJump,
@@ -3080,8 +3263,11 @@ function NodeOverlay({
   onClose: () => void;
   compromised: boolean;
   isIsolated?: boolean;
+  isBlocked?: boolean;
+  isPatched?: boolean;
   onToggleIsolate?: () => void;
-  events: Event[];
+  onTogglePatch?: () => void;
+  events: (Event & { status?: string; statusDetail?: string })[];
   t: number;
   onJump: (t: number) => void;
 }) {
@@ -3111,6 +3297,14 @@ function NodeOverlay({
                 <span className="mono-label px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/40">
                   AIR-GAPPED
                 </span>
+              ) : isPatched ? (
+                <span className="mono-label px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  FIRMWARE ATTESTED
+                </span>
+              ) : isBlocked ? (
+                <span className="mono-label px-2 py-0.5 bg-sky-500/20 text-sky-400 border border-sky-500/40">
+                  AIR-GAP PROTECTED
+                </span>
               ) : compromised ? (
                 <span className="mono-label px-2 py-0.5 bg-danger/20 text-danger border border-danger/40 animate-pulse">
                   COMPROMISED
@@ -3122,7 +3316,9 @@ function NodeOverlay({
               )}
             </div>
             <p className="display text-4xl sm:text-6xl mt-2 leading-none">{node.label}</p>
-            <p className="font-mono text-xs text-foreground/60 mt-2 uppercase tracking-wider">{node.kind}</p>
+            <p className="font-mono text-xs text-foreground/60 mt-2 uppercase tracking-wider">
+              {node.kind}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -3140,10 +3336,26 @@ function NodeOverlay({
               <p className="mono-label">TELEMETRY & HARDWARE PROFILE</p>
               <p
                 className={`display text-2xl sm:text-3xl mt-2 ${
-                  isIsolated ? "text-amber-400" : compromised ? "text-danger" : "text-accent"
+                  isIsolated
+                    ? "text-amber-400"
+                    : isPatched
+                      ? "text-emerald-400"
+                      : isBlocked
+                        ? "text-sky-400"
+                        : compromised
+                          ? "text-danger"
+                          : "text-accent"
                 }`}
               >
-                {isIsolated ? "ISOLATED FROM OT BUS" : compromised ? "COMPROMISED VECTOR" : "NOMINAL OPERATION"}
+                {isIsolated
+                  ? "AIR-GAPPED FROM OT BUS"
+                  : isPatched
+                    ? "ATTESTED & SECURED"
+                    : isBlocked
+                      ? "CASCADE BLOCKED"
+                      : compromised
+                        ? "COMPROMISED VECTOR"
+                        : "NOMINAL OPERATION"}
               </p>
               <div className="mt-5 space-y-3 font-mono text-xs text-foreground/70">
                 <Row k="vendor" v={node.vendor} />
@@ -3183,23 +3395,53 @@ function NodeOverlay({
               </p>
             ) : (
               <ol className="mt-4 space-y-3">
-                {events.map((e, i) => (
-                  <li key={i}>
-                    <button
-                      onClick={() => onJump(e.t)}
-                      className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
-                    >
-                      <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
-                        T+{fmt(e.t)}
-                      </span>
-                      <span className={`size-2.5 ${sevColor(e.sev)}`} />
-                      <span className="font-serif text-sm sm:text-base font-medium truncate">{e.title}</span>
-                      <span className="mono-label text-xs text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                        JUMP →
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                {events.map((e, i) => {
+                  const isBlockedEvent =
+                    e.status === "BLOCKED_AIRGAP" ||
+                    e.status === "PREVENTED_UPSTREAM" ||
+                    e.status === "PATCHED";
+
+                  return (
+                    <li key={i}>
+                      <button
+                        onClick={() => onJump(e.t)}
+                        className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
+                      >
+                        <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
+                          T+{fmt(e.t)}
+                        </span>
+                        <span
+                          className={`size-2.5 ${
+                            e.status === "BLOCKED_AIRGAP"
+                              ? "bg-amber-400"
+                              : e.status === "PREVENTED_UPSTREAM"
+                                ? "bg-sky-400"
+                                : e.status === "PATCHED"
+                                  ? "bg-emerald-400"
+                                  : sevColor(e.sev)
+                          }`}
+                        />
+                        <div className="min-w-0">
+                          <p
+                            className={`font-serif text-sm sm:text-base font-medium truncate ${
+                              isBlockedEvent ? "line-through opacity-70" : ""
+                            }`}
+                          >
+                            {e.title}
+                          </p>
+                          {e.statusDetail && (
+                            <p className="font-mono text-[11px] text-amber-400/90 truncate">
+                              {e.statusDetail}
+                            </p>
+                          )}
+                        </div>
+                        <span className="mono-label text-xs text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                          JUMP →
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </div>
@@ -3213,6 +3455,18 @@ function NodeOverlay({
           >
             CLOSE DOSSIER [ESC]
           </button>
+          {onTogglePatch && (
+            <button
+              onClick={onTogglePatch}
+              className={`mono-label px-4 py-2.5 transition-colors text-xs sm:text-sm ${
+                isPatched
+                  ? "bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/40 font-bold"
+                  : "bg-muted/80 text-foreground border border-rule hover:border-emerald-400 hover:text-emerald-400 font-bold"
+              }`}
+            >
+              {isPatched ? "REVERT PATCH ↩" : "DEPLOY FIRMWARE PATCH 🛡️"}
+            </button>
+          )}
           {onToggleIsolate && (
             <button
               onClick={onToggleIsolate}

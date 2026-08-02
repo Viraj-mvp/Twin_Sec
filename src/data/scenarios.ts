@@ -1518,60 +1518,87 @@ export function computeOutcome(
   choices: Record<string, ChoiceId>,
   decisions: readonly Decision[] = DEFAULT_DECISIONS,
   sector: SectorId = "power",
+  isolatedNodes: Set<string> = new Set<string>(),
+  firstActionTime: number | null = null,
 ) {
   let mw = 14;
-  let mttdMin = 14;
-  let mttrH = 48;
   let costM = 4.1;
-  let physicsMul = 1;
+  let physicsMul = 1.0;
   let acts = 0;
 
   for (const d of decisions) {
     const c = choices[d.id];
     if (c === "ACT") {
       acts++;
-      mw -= 5;
-      mttdMin = Math.max(2, mttdMin - 4);
-      mttrH = Math.max(6, mttrH - 14);
-      costM = Math.max(0.4, costM - 1.2);
-      physicsMul *= 0.6;
+      mw -= 4;
+      costM -= 1.0;
+      physicsMul *= 0.45;
     } else if (c === "DEFER") {
       mw -= 1;
-      mttrH -= 4;
       costM -= 0.3;
-      physicsMul *= 0.9;
+      physicsMul *= 0.85;
     }
   }
+
+  // Air-gap isolation benefits
+  const isoCount = isolatedNodes.size;
+  if (isoCount > 0) {
+    mw = Math.max(0, mw - isoCount * 3);
+    costM = Math.max(0.3, costM - isoCount * 0.5);
+    physicsMul = Math.min(physicsMul, Math.max(0.05, 0.5 ** isoCount));
+  }
   mw = Math.max(0, Math.round(mw));
+
+  // Dynamic real MTTD
+  let mttdFormatted = "14.0m";
+  if (firstActionTime !== null && firstActionTime !== undefined) {
+    const mttdSec = Math.max(0, firstActionTime);
+    const mttdMin = mttdSec / 60;
+    mttdFormatted = mttdMin < 1 ? `${Math.round(mttdSec)}s` : `${mttdMin.toFixed(1)}m`;
+  } else if (acts > 0 || isoCount > 0) {
+    mttdFormatted = "12.5m";
+  }
+
+  // Dynamic real MTTR
+  let mttrH = 48.0;
+  if (mw === 0 || acts >= 3 || isoCount >= 2) {
+    mttrH = 0.8;
+  } else if (acts === 2 || (isoCount === 1 && mw <= 4)) {
+    mttrH = 4.5;
+  } else if (acts === 1 || isoCount === 1) {
+    mttrH = 12.0;
+  }
+  const mttrFormatted = mttrH < 1 ? `${Math.round(mttrH * 60)}min` : `${mttrH.toFixed(1)}h`;
 
   const sectorImpact = IMPACT_LABELS[sector] ?? IMPACT_LABELS.power;
   const impactVal = (mw * sectorImpact.factor).toFixed(1).replace(/\.0$/, "");
   const impactFormatted = `${impactVal} ${sectorImpact.unit}`;
 
   const branch =
-    acts === 0
-      ? "A — BASELINE"
-      : acts === 3
-        ? "D — CONTAINED"
-        : acts === 2
-          ? "C — REDUCED"
-          : "B — DEGRADED";
-  const dossierId = `001${acts > 0 ? "-" + ["A", "B", "C", "D"][acts] : ""}`;
-  const duration = mw === 0 ? "ZERO IMPACT" : `${Math.max(8, 96 - acts * 22)} SECONDS`;
-  const alarms = acts >= 2 ? "ALARMS RAISED" : "ZERO ALARMS";
+    mw === 0 || acts >= 3 || (isoCount >= 1 && mw <= 2)
+      ? "D — CONTAINED"
+      : acts === 2 || mw <= 5
+        ? "C — REDUCED"
+        : acts === 1 || isoCount >= 1
+          ? "B — DEGRADED"
+          : "A — BASELINE";
+  const dossierId = `001${acts > 0 ? "-" + ["A", "B", "C", "D"][acts] : isoCount > 0 ? "-D" : ""}`;
+  const duration =
+    mw === 0 ? "ZERO IMPACT" : `${Math.max(8, 96 - acts * 22 - isoCount * 15)} SECONDS`;
+  const alarms = acts >= 2 || isoCount >= 1 ? "ALARMS RAISED" : "ZERO ALARMS";
   const narrative =
-    acts === 0
-      ? "The SCADA console showed nothing wrong until the process failed. The twin saw it 14 minutes earlier."
-      : acts === 3
-        ? "Every prompt was answered. The twin's early warnings translated to action. The facility envelope held."
-        : "Partial intervention bent the curve. The cascade narrowed but did not break.";
+    mw === 0 || acts === 3
+      ? "Every prompt was answered and critical OT links air-gapped. The facility envelope held with zero load shed."
+      : acts >= 1 || isoCount >= 1
+        ? "Partial intervention bent the curve. The cascade narrowed before catastrophic mechanical rupture."
+        : "The SCADA console showed nothing wrong until the process failed. The twin saw it 14 minutes earlier.";
 
   return {
     mw,
     duration,
     alarms,
-    mttd: `${mttdMin}m`,
-    mttr: `${mttrH}h`,
+    mttd: mttdFormatted,
+    mttr: mttrFormatted,
     cost: `$${costM.toFixed(1)}M`,
     branch,
     dossierId,

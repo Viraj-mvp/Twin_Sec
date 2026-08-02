@@ -139,15 +139,15 @@ Return strict JSON without markdown formatting.`,
         id: scenarioId,
         createdBy: operator?.id || null,
         sector,
-        name: parsedScenario.name || `AI Scenario: ${adversaryName}`,
-        description: parsedScenario.description || prompt,
-        attackType: parsedScenario.attackType || "disruption",
+        name: String(parsedScenario.name || `AI Scenario: ${adversaryName}`),
+        description: String(parsedScenario.description || prompt),
+        attackType: String(parsedScenario.attackType || "disruption"),
         adversaryProfile: adversaryName,
         eventsJson: JSON.stringify(parsedScenario.events || []),
         decisionsJson: JSON.stringify(parsedScenario.decisions || []),
         isPublic: true,
         createdAt: new Date().toISOString(),
-      } as any);
+      });
 
       await db.insert(auditLogs).values({
         id: crypto.randomUUID(),
@@ -164,8 +164,10 @@ Return strict JSON without markdown formatting.`,
       sector,
       name: (parsedScenario.name as string) || `AI Scenario: ${adversaryName}`,
       description: (parsedScenario.description as string) || prompt,
-      events: (parsedScenario.events as any[]) || [],
-      decisions: (parsedScenario.decisions as any[]) || [],
+      events:
+        (parsedScenario.events as Array<Record<string, string | number | boolean>>) || [],
+      decisions:
+        (parsedScenario.decisions as Array<Record<string, string | number | boolean>>) || [],
       savedToDb: saveToDb,
     };
   });

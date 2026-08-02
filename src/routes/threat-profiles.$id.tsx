@@ -29,11 +29,12 @@ function ThreatProfileDetail() {
 
   const [activeTab, setActiveTab] = useState<"dossier" | "interrogation">("dossier");
   const [messages, setMessages] = useState<
-    Array<{ sender: "interrogator" | "actor"; text: string; timestamp: string }>
+    Array<{ sender: "interrogator" | "actor"; text: string; timestamp: string; engine?: string }>
   >([]);
   const [questionInput, setQuestionInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const scrambleRef = useScrambleReveal<HTMLSpanElement>();
@@ -96,20 +97,83 @@ function ThreatProfileDetail() {
 
       setMessages((prev) => [
         ...prev,
-        { sender: "actor", text: res.reply, timestamp: res.timestamp },
+        {
+          sender: "actor",
+          text: res.reply,
+          timestamp: res.timestamp,
+          engine: res.engine,
+        },
       ]);
     } catch {
       setMessages((prev) => [
         ...prev,
         {
           sender: "actor",
-          text: '[RESEARCHER NOTE: Interview connection lost]\n\n"The session was interrupted. All operational discussions are subject to review."',
+          text: '[RESEARCHER NOTE: Interview connection interrupted]\n\n"The session was interrupted. All operational discussions are subject to BAU review."',
           timestamp: new Date().toLocaleTimeString(),
+          engine: "Connection Degraded",
         },
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSpeak = (idx: number, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (speakingIdx === idx) {
+      window.speechSynthesis.cancel();
+      setSpeakingIdx(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const cleanDialogue = text.replace(/^\[RESEARCHER NOTE:[\s\S]*?\]\n*/i, "").replace(/"/g, "");
+    const utterance = new SpeechSynthesisUtterance(cleanDialogue);
+    utterance.rate = 0.92;
+    utterance.pitch = 0.82;
+    utterance.onend = () => setSpeakingIdx(null);
+    utterance.onerror = () => setSpeakingIdx(null);
+    setSpeakingIdx(idx);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleClearSession = () => {
+    if (typeof window !== "undefined" && speakingIdx !== null) {
+      window.speechSynthesis.cancel();
+    }
+    setMessages([]);
+    setSpeakingIdx(null);
+  };
+
+  const handleExportTranscript = () => {
+    const lines = messages.map((m) => {
+      const role = m.sender === "interrogator" ? "SENIOR RESEARCHER" : actor.name.toUpperCase();
+      return `[${m.timestamp}] ${role}:\n${m.text}\n`;
+    });
+    const blob = new Blob(
+      [
+        `TWINSEC FBI BAU INTERROGATION TRANSCRIPT\nDOSSIER: ${actor.name}\nDATE: ${new Date().toLocaleDateString()}\n==================================================\n\n` +
+          lines.join("\n"),
+      ],
+      { type: "text/plain" },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `interrogation_${actor.id}_${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseMessageText = (text: string) => {
+    const match = text.match(/^\[RESEARCHER NOTE:\s*([\s\S]*?)\]\n*/i);
+    if (match) {
+      return {
+        note: match[1].trim(),
+        dialogue: text.replace(match[0], "").trim(),
+      };
+    }
+    return { note: null, dialogue: text };
   };
 
   return (
@@ -223,7 +287,9 @@ function ThreatProfileDetail() {
                 <dl className="space-y-6 text-sm">
                   <div>
                     <dt className="mono-label !text-ink/50">PATIENCE LEVEL</dt>
-                    <dd className="font-bold text-lg mt-1">{actor.psychologicalProfile.patience}</dd>
+                    <dd className="font-bold text-lg mt-1">
+                      {actor.psychologicalProfile.patience}
+                    </dd>
                   </div>
                   <div className="hairline !bg-ink/20" />
                   <div>
@@ -262,7 +328,10 @@ function ThreatProfileDetail() {
                 </p>
                 <div className="space-y-6">
                   {actor.knownOperations.map((op, idx) => (
-                    <div key={idx} className="group border-2 border-transparent hover:border-ink p-4 transition-all">
+                    <div
+                      key={idx}
+                      className="group border-2 border-transparent hover:border-ink p-4 transition-all"
+                    >
                       <div className="flex justify-between items-baseline mb-2">
                         <h4 className="display text-3xl group-hover:text-danger transition-colors">
                           {op.name}
@@ -291,17 +360,38 @@ function ThreatProfileDetail() {
         ) : (
           /* INTERROGATION ROOM VIEW */
           <div className="border-4 border-ink bg-paper shadow-brutal-ink relative max-w-5xl">
-            {/* Top Bar: Rec Indicator */}
-            <div className="flex flex-wrap items-center justify-between border-b-4 border-ink p-4 bg-ink text-paper">
+            {/* Top Bar: Rec Indicator & Controls */}
+            <div className="flex flex-wrap items-center justify-between border-b-4 border-ink p-4 bg-ink text-paper gap-4">
               <div className="flex items-center gap-4">
                 <span className="size-3 bg-danger rounded-full animate-pulse shadow-[0_0_8px_#ef4444]" />
-                <span className="mono-label text-danger tracking-widest font-bold">
-                  REC {formatRecTime(recordingSeconds)} // POST-ARREST INTERVIEW
+                <span className="mono-label text-danger tracking-widest font-bold text-xs md:text-sm">
+                  REC {formatRecTime(recordingSeconds)} // INTERROGATION ROOM 4B
                 </span>
               </div>
-              <span className="mono-label text-paper/60">
-                SUBJECT: {actor.interviewContext.characterName.toUpperCase()}
-              </span>
+
+              <div className="flex items-center gap-3 font-mono text-xs">
+                {messages.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleExportTranscript}
+                      className="px-3 py-1 bg-paper/10 hover:bg-paper/20 border border-paper/30 text-paper transition-all cursor-pointer"
+                      title="Download transcript"
+                    >
+                      💾 EXPORT LOG
+                    </button>
+                    <button
+                      onClick={handleClearSession}
+                      className="px-3 py-1 bg-danger/80 hover:bg-danger text-paper transition-all cursor-pointer font-bold"
+                      title="Clear interrogation session"
+                    >
+                      CLEAR SESSION
+                    </button>
+                  </>
+                )}
+                <span className="mono-label text-paper/60 hidden sm:inline border-l border-paper/20 pl-3">
+                  SUBJECT: {actor.interviewContext.characterName.toUpperCase()}
+                </span>
+              </div>
             </div>
 
             {/* Conversation Log Box */}
@@ -309,41 +399,98 @@ function ThreatProfileDetail() {
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-ink/50 space-y-4">
                   <div className="text-6xl mb-2 grayscale opacity-50">🎙️</div>
-                  <p className="display text-3xl text-ink uppercase">SESSION READY</p>
-                  <p className="font-serif text-xl italic max-w-md">
-                    Select a suggested question below or type a query to interrogate the captured
-                    threat actor.
+                  <p className="display text-3xl text-ink uppercase">
+                    INTERROGATION SESSION ACTIVE
                   </p>
+                  <p className="font-serif text-xl italic max-w-md">
+                    Select a suggested prompt below or type your inquiry to interrogate{" "}
+                    <strong className="text-ink">{actor.name}</strong> on motives, TTPs, or
+                    failures.
+                  </p>
+                  <div className="inline-flex items-center gap-2 px-4 py-2 border border-ink/20 bg-paper text-xs font-mono text-ink/70 mt-2">
+                    <span className="size-2 bg-emerald-500 rounded-full animate-ping" />
+                    BAU MINDHUNTER MULTI-PROVIDER AI & DOSSIER ENGINE READY
+                  </div>
                 </div>
               ) : (
-                messages.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex flex-col space-y-2 ${
-                      m.sender === "interrogator" ? "items-end" : "items-start"
-                    }`}
-                  >
-                    <span className="mono-label text-[10px] text-ink/50 px-1">
-                      {m.sender === "interrogator" ? "SENIOR RESEARCHER" : actor.name.toUpperCase()} ·{" "}
-                      {m.timestamp}
-                    </span>
+                messages.map((m, idx) => {
+                  const { note, dialogue } = parseMessageText(m.text);
+
+                  return (
                     <div
-                      className={`max-w-3xl p-5 leading-relaxed whitespace-pre-wrap text-sm md:text-base border-2 ${
-                        m.sender === "interrogator"
-                          ? "bg-paper border-ink text-ink shadow-[4px_4px_0_0_#1a1a1a]"
-                          : "bg-ink border-ink text-paper shadow-[4px_4px_0_0_#ef4444]"
+                      key={idx}
+                      className={`flex flex-col space-y-2 ${
+                        m.sender === "interrogator" ? "items-end" : "items-start"
                       }`}
                     >
-                      {m.text}
+                      <div className="flex items-center gap-2 mono-label text-[10px] text-ink/50 px-1">
+                        <span>
+                          {m.sender === "interrogator"
+                            ? "SENIOR RESEARCHER"
+                            : actor.name.toUpperCase()}{" "}
+                          · {m.timestamp}
+                        </span>
+                        {m.engine && (
+                          <span className="bg-ink/10 px-2 py-0.5 rounded text-[9px] font-bold text-ink/70">
+                            {m.engine}
+                          </span>
+                        )}
+                      </div>
+
+                      <div
+                        className={`max-w-3xl border-2 transition-all relative ${
+                          m.sender === "interrogator"
+                            ? "bg-paper border-ink text-ink shadow-[4px_4px_0_0_#1a1a1a] p-5"
+                            : "bg-ink border-ink text-paper shadow-[4px_4px_0_0_#ef4444] p-6 space-y-4"
+                        }`}
+                      >
+                        {/* If actor reply has a BAU Researcher Note, render it as a styled badge */}
+                        {m.sender === "actor" && note && (
+                          <div className="bg-amber-400/20 border-l-4 border-amber-400 p-3 text-amber-200 text-xs font-mono tracking-wide leading-relaxed">
+                            <span className="font-bold text-amber-300 block mb-1">
+                              🔍 FBI BAU PSYCHOLOGICAL ASSESSMENT:
+                            </span>
+                            {note}
+                          </div>
+                        )}
+
+                        <div className="leading-relaxed whitespace-pre-wrap text-sm md:text-base font-serif italic">
+                          {m.sender === "actor" ? dialogue : m.text}
+                        </div>
+
+                        {/* Speech synthesis audio toggle button for subject answers */}
+                        {m.sender === "actor" && (
+                          <div className="pt-2 border-t border-paper/20 flex items-center justify-between text-xs font-mono">
+                            <button
+                              onClick={() => handleSpeak(idx, m.text)}
+                              className="text-paper/70 hover:text-amber-400 flex items-center gap-2 cursor-pointer transition-colors"
+                            >
+                              {speakingIdx === idx ? (
+                                <>
+                                  <span className="size-2 bg-amber-400 rounded-full animate-ping" />
+                                  <span>⏸️ PAUSE VOICE</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>🔊 PLAY AUDIO INTERVIEW</span>
+                                </>
+                              )}
+                            </button>
+                            <span className="text-[10px] text-paper/40 font-mono">
+                              BAU TAPE RECORDING
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
 
               {isLoading && (
                 <div className="flex items-center gap-3 text-danger animate-pulse py-4 font-bold mono-label">
                   <span className="size-2 bg-danger" />
-                  <span>{actor.name.toUpperCase()} IS RESPONDING...</span>
+                  <span>{actor.name.toUpperCase()} IS FORMULATING A RESPONSE...</span>
                 </div>
               )}
               <div ref={chatEndRef} />
@@ -352,18 +499,43 @@ function ThreatProfileDetail() {
             {/* Input & Suggested Prompts Area */}
             <div className="border-t-4 border-ink p-6 md:p-8 bg-paper">
               <div className="mb-6 space-y-3">
-                <span className="mono-label text-ink/50">// SUGGESTED INTERROGATION PROMPTS</span>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="mono-label text-ink/50">// SUGGESTED INTERROGATION PROMPTS</span>
+                  <span className="mono-label text-[10px] text-ink/40">CLICK TO TRANSMIT</span>
+                </div>
+                <div className="flex flex-wrap gap-2.5">
                   {actor.interviewContext.suggestedQuestions.map((q, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleAsk(q)}
                       disabled={isLoading}
-                      className="border-2 border-ink/30 hover:border-ink bg-transparent px-4 py-2 mono-label text-[11px] text-ink/70 hover:text-ink transition-all text-left cursor-pointer shadow-none hover:shadow-[2px_2px_0_0_#1a1a1a]"
+                      className="border-2 border-ink/30 hover:border-ink bg-transparent px-4 py-2.5 mono-label text-[11px] text-ink/80 hover:text-ink transition-all text-left cursor-pointer shadow-none hover:shadow-[2px_2px_0_0_#1a1a1a] hover:-translate-y-0.5"
                     >
                       "{q}"
                     </button>
                   ))}
+
+                  {/* Extra tactical question triggers */}
+                  <button
+                    onClick={() =>
+                      handleAsk(
+                        `What security control or defense would have completely stopped your operation?`,
+                      )
+                    }
+                    disabled={isLoading}
+                    className="border-2 border-danger/40 hover:border-danger bg-danger/5 px-4 py-2.5 mono-label text-[11px] text-danger font-bold transition-all text-left cursor-pointer shadow-none hover:shadow-[2px_2px_0_0_#ef4444]"
+                  >
+                    🛡️ "What defense would have stopped you?"
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleAsk(`Explain your biggest mistake and how law enforcement caught you.`)
+                    }
+                    disabled={isLoading}
+                    className="border-2 border-danger/40 hover:border-danger bg-danger/5 px-4 py-2.5 mono-label text-[11px] text-danger font-bold transition-all text-left cursor-pointer shadow-none hover:shadow-[2px_2px_0_0_#ef4444]"
+                  >
+                    🚔 "How did you get caught?"
+                  </button>
                 </div>
               </div>
 
@@ -379,7 +551,7 @@ function ThreatProfileDetail() {
                   value={questionInput}
                   onChange={(e) => setQuestionInput(e.target.value)}
                   disabled={isLoading}
-                  placeholder={`Ask ${actor.name} about motives, timing, or target choices...`}
+                  placeholder={`Interrogate ${actor.name} on motives, VPN credentials, SCADA setpoints, or failures...`}
                   aria-label="Question for threat actor interrogation"
                   className="flex-1 bg-transparent px-6 py-4 text-sm md:text-base text-ink focus:outline-none placeholder:text-ink/40 font-mono"
                 />

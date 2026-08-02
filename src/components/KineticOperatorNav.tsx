@@ -29,8 +29,6 @@ import { useOperator } from "@/contexts/OperatorContext";
 import { loginOperator, registerOperator } from "@/lib/api/auth.functions";
 import { log } from "@/lib/logger";
 
-
-
 function initials(name: string): string {
   const parts = name.trim().split(/[\s_-]+/);
   if (parts.length >= 2) {
