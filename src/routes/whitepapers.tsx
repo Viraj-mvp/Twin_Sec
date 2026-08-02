@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { handleSmartBack } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/whitepapers")({
   head: () => ({
@@ -89,9 +90,13 @@ function Whitepapers() {
     <main ref={rootRef} className="min-h-screen bg-background text-foreground">
       <header className="border-b border-rule">
         <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-5 flex flex-wrap justify-between items-baseline gap-4 mono-label">
-          <Link to="/" className="hover:text-accent">
-            ← BRIEFING
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
           <span>TWINSEC RESEARCH · WHITEPAPERS · 2026</span>
           <Link to="/field-reports" className="hover:text-accent">
             FIELD REPORTS →
@@ -189,9 +194,13 @@ function Whitepapers() {
       <footer className="border-t border-rule">
         <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-8 flex flex-wrap justify-between mono-label gap-3">
           <span>TWINSEC RESEARCH · 2026</span>
-          <Link to="/" className="hover:text-accent">
-            ← RETURN TO BRIEFING
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
         </div>
       </footer>
     </main>

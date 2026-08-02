@@ -181,42 +181,6 @@ function ThreatProfileDetail() {
       <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
       <div className="absolute inset-0 scanline opacity-45 pointer-events-none" />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b-2 border-ink bg-paper/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo className="size-6 text-danger" />
-            <Link
-              to="/threat-profiles"
-              className="display text-xl tracking-wide hover:text-danger transition-colors"
-            >
-              TwinSec BAU
-            </Link>
-            <span className="mono-label hidden md:inline text-danger font-bold pl-3 border-l border-ink/30">
-              // DOSSIER: {actor.name}
-            </span>
-          </div>
-          <div className="flex items-center gap-6 mono-label text-xs">
-            <Link
-              to="/simulation"
-              search={{
-                sector: actor.scenarioId as
-                  | "power"
-                  | "water"
-                  | "oil-gas"
-                  | "manufacturing"
-                  | "port"
-                  | "smart-building"
-                  | "smart-city",
-              }}
-              className="bg-danger text-paper border-2 border-danger px-4 py-2 font-bold shadow-[4px_4px_0_0_#ef4444] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
-            >
-              LAUNCH SIMULATION ({actor.scenarioId.toUpperCase()}) →
-            </Link>
-          </div>
-        </div>
-      </header>
-
       {/* Profile Header */}
       <section className="mx-auto max-w-[1600px] w-full px-6 lg:px-10 py-16 lg:py-24 relative z-10 border-b border-ink/30">
         <div className="grid grid-cols-12 gap-8">

@@ -68,45 +68,6 @@ function DashboardPage() {
       <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
       <div className="absolute inset-0 scanline pointer-events-none opacity-45" />
 
-      {/* Header bar */}
-      <header className="sticky top-0 z-50 border-b border-rule bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo className="size-6" />
-            <Link
-              to="/"
-              className="display text-xl tracking-wide hover:text-accent transition-colors"
-            >
-              TwinSec
-            </Link>
-            <span className="mono-label hidden md:inline pl-3 text-accent">
-              ● OPERATOR DASHBOARD
-            </span>
-          </div>
-          <div className="flex items-center gap-4 sm:gap-6 mono-label text-xs pr-36 sm:pr-44">
-            <Link
-              to="/simulation"
-              search={{ sector: "power" }}
-              className="hover:text-accent transition-colors hidden sm:inline"
-            >
-              CYBER RANGE
-            </Link>
-            <Link
-              to="/training-ledger"
-              className="hover:text-accent transition-colors hidden md:inline"
-            >
-              PUBLIC LEDGER
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="bg-accent/10 border border-accent/30 text-accent px-3 py-1 hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              LOGOUT TTY
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main Container */}
       <section className="flex-1 max-w-[1600px] mx-auto w-full px-6 lg:px-10 py-10 space-y-10 relative z-10">
         {/* Top Info Banner */}

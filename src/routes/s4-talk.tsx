@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { handleSmartBack } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/s4-talk")({
   head: () => ({
@@ -63,9 +64,13 @@ function S4Talk() {
     <main ref={rootRef} className="min-h-screen bg-ink text-paper">
       <header className="border-b border-paper/20">
         <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-5 flex flex-wrap justify-between items-baseline gap-4 mono-label !text-paper/70">
-          <Link to="/" className="hover:text-accent">
-            ← TWINSEC
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
           <span className="text-accent">S4X26 · MIAMI · FONTAINEBLEAU · FEB 09–11 · 2027</span>
           <Link to="/def-con-brief" className="hover:text-accent">
             DEF CON BRIEF →

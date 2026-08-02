@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { db } from "../db/db";
-import { trainingRuns, auditLogs } from "../db/schema";
+import { trainingRuns, auditLogs, simulationScenarios } from "../db/schema";
 import { getSessionCookie, getSessionOperator } from "../auth.server";
 import { checkRateLimit, LIMITS } from "../rate-limit.server";
 import { SectorId } from "../../data/scenarios";
@@ -334,4 +334,46 @@ export const generateDebriefScorecard = createServerFn({ method: "POST" })
         ],
       };
     }
+  });
+
+// ── 6. LIST DB ATTACK SCENARIOS ──────────────────────────────────────────
+export const listDatabaseAttacks = createServerFn({ method: "GET" }).handler(async () => {
+  return await db.select().from(simulationScenarios);
+});
+
+// ── 7. ADD DB ATTACK SCENARIO ───────────────────────────────────────────
+const AddAttackInput = z.object({
+  name: z.string().min(3),
+  sector: z.enum(SECTORS),
+  description: z.string(),
+  attackType: z.string().default("disruption"),
+  adversaryProfile: z.string().default("nation-state"),
+  eventsJson: z.string().optional(),
+  decisionsJson: z.string().optional(),
+  nodesJson: z.string().optional(),
+});
+
+export const addDatabaseAttack = createServerFn({ method: "POST" })
+  .validator(AddAttackInput)
+  .handler(async ({ data }) => {
+    const token = getSessionCookie();
+    const operator = await getSessionOperator(token);
+
+    const scenarioId = `attack-${crypto.randomUUID()}`;
+    await db.insert(simulationScenarios).values({
+      id: scenarioId,
+      createdBy: operator?.id || null,
+      sector: data.sector,
+      name: data.name,
+      description: data.description,
+      attackType: data.attackType,
+      adversaryProfile: data.adversaryProfile,
+      eventsJson: data.eventsJson || "[]",
+      decisionsJson: data.decisionsJson || "[]",
+      nodesJson: data.nodesJson || "[]",
+      isPublic: true,
+      createdAt: new Date().toISOString(),
+    });
+
+    return { success: true, scenarioId };
   });

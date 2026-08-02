@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { handleSmartBack } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/def-con-brief")({
   head: () => ({
@@ -58,9 +59,13 @@ function DefconBrief() {
         <div className="absolute inset-0 grid-bg opacity-30" />
         <div className="absolute inset-0 scanline pointer-events-none" />
         <div className="absolute top-6 left-6 right-6 flex justify-between mono-label z-10">
-          <Link to="/" className="hover:text-accent">
-            ← TWINSEC
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
           <span className="text-accent">DEF CON 33 · LAS VEGAS · AUG 07–10 · 2026</span>
           <Link to="/whitepapers" className="hover:text-accent">
             WHITEPAPERS →

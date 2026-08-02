@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import facility from "@/assets/facility.jpg";
 import schematic from "@/assets/schematic.jpg";
 import breaker from "@/assets/breaker.jpg";
@@ -9,8 +9,9 @@ import { useSplitCharReveal, useScrambleReveal, useWordReveal } from "@/hooks/us
 import { useOperatorSession } from "@/lib/auth-store";
 import { useOperator } from "@/contexts/OperatorContext";
 import { logoutOperator } from "@/lib/api/auth.functions";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { Footer } from "../components/Footer";
 import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
+import { pushNavSection, getLastSection } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -47,10 +48,10 @@ function Marquee() {
     <div className="border-y border-rule bg-background overflow-hidden">
       <div className="flex whitespace-nowrap animate-ticker py-3">
         {all.map((t, i) => (
-          <div key={i} className="mono-label flex items-center gap-6 px-6">
-            <span className="size-1.5 bg-accent animate-pulse-dot" />
-            <span className="text-foreground/80">{t}</span>
-            <span className="text-rule">/</span>
+          <div key={i} className="mono-label flex items-center gap-6 px-6 !text-foreground">
+            <span className="size-2 bg-accent rounded-full animate-pulse-dot" />
+            <span className="text-foreground font-bold tracking-wider">{t}</span>
+            <span className="text-accent font-bold">/</span>
           </div>
         ))}
       </div>
@@ -79,10 +80,12 @@ function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 pt-20 pb-32 lg:pt-32 lg:pb-44">
-        <div className="flex items-center justify-between mono-label mb-12 animate-reveal">
-          <span>ISSUE 001 — VOL. III</span>
-          <span className="hidden md:inline">FIELD REPORT / SECTOR 9 · TURBINE HALL</span>
-          <span>17 JUN 2026 · 04:17 UTC</span>
+        <div className="flex items-center justify-between mb-12 mono-label text-xs font-mono tracking-widest uppercase animate-reveal">
+          <span className="text-foreground/90 font-medium">ISSUE 001 · VOL. III</span>
+          <span className="hidden md:inline text-accent font-bold tracking-[0.2em]">
+            FIELD REPORT · SECTOR 9 · TURBINE HALL
+          </span>
+          <span className="text-foreground/90 font-medium">17 JUN 2026 · 04:17 UTC</span>
         </div>
 
         <h1
@@ -268,6 +271,7 @@ function BriefingHub() {
             <Link
               key={h.to}
               to={h.to as "/def-con-brief"}
+              onClick={() => pushNavSection("briefing-hub")}
               className="border-2 border-rule bg-card hover:border-accent hover:shadow-comic-accent p-6 flex flex-col justify-between transition-all group min-h-[220px]"
             >
               <div className="space-y-3">
@@ -792,91 +796,6 @@ function Closing() {
   );
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-rule">
-      <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-16 grid grid-cols-12 gap-8">
-        <div className="col-span-12 md:col-span-5">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo showWordmark size={38} />
-          </div>
-          <p className="font-serif italic text-xl mt-6 max-w-md text-foreground/70">
-            A cyber-physical simulation platform for the people who keep the lights on.
-          </p>
-        </div>
-        {[
-          {
-            h: "PLATFORM",
-            l: [
-              { t: "Twin Engine", to: "/twin-engine" },
-              { t: "Adversary Library", to: "/twin-engine" },
-              { t: "Replay", to: "/simulation" },
-              { t: "Dossier API", to: "/twin-engine" },
-            ],
-          },
-          {
-            h: "SECTORS",
-            l: [
-              { t: "Power", to: "/facility/$id", params: { id: "power" } },
-              { t: "Water", to: "/facility/$id", params: { id: "water" } },
-              { t: "Oil & Gas", to: "/facility/$id", params: { id: "oil-gas" } },
-              { t: "Manufacturing", to: "/facility/$id", params: { id: "manufacturing" } },
-              { t: "Smart City", to: "/facility/$id", params: { id: "smart-city" } },
-            ],
-          },
-          {
-            h: "INTELLIGENCE",
-            l: [
-              { t: "Field Reports", to: "/field-reports" },
-              { t: "Whitepapers", to: "/whitepapers" },
-              { t: "DEF CON Brief", to: "/def-con-brief" },
-              { t: "S4 Talk", to: "/s4-talk" },
-            ],
-          },
-        ].map((c) => (
-          <div key={c.h} className="col-span-6 md:col-span-2">
-            <p className="mono-label">{c.h}</p>
-            <ul className="mt-4 space-y-3 font-mono text-sm">
-              {c.l.map((x) => (
-                <li key={x.t}>
-                  {"params" in x ? (
-                    <Link
-                      to={x.to as "/facility/$id"}
-                      params={x.params as { id: string }}
-                      className="hover:text-accent transition-colors"
-                    >
-                      {x.t}
-                    </Link>
-                  ) : (
-                    <Link to={x.to as string} className="hover:text-accent transition-colors">
-                      {x.t}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        <div className="col-span-12 md:col-span-1 mono-label text-right">v1.0</div>
-      </div>
-      <div className="border-t border-rule">
-        <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-6 flex flex-col sm:flex-row justify-between items-center gap-4 mono-label text-xs">
-          <span>© 2026 TWINSEC SYSTEMS</span>
-          <div className="flex gap-6">
-            <Link to="/privacy" className="hover:text-accent transition-colors">
-              PRIVACY POLICY
-            </Link>
-            <Link to="/terms" className="hover:text-accent transition-colors">
-              TERMS OF SERVICE
-            </Link>
-          </div>
-          <span>BUILT FOR DEF CON · BLACK HAT · S4 · RSA</span>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
 function MindhunterShowcase() {
   const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
   const actors = [
@@ -1039,6 +958,20 @@ function MindhunterShowcase() {
 
 function Index() {
   const rootRef = useGsapReveal<HTMLDivElement>();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const targetId = window.location.hash.replace("#", "") || getLastSection();
+    if (targetId) {
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth" });
+        }, 200);
+      }
+    }
+  }, []);
+
   return (
     <div ref={rootRef} className="min-h-screen bg-background text-foreground select-none">
       <Marquee />

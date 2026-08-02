@@ -191,5 +191,72 @@ autoMigrateTable("audit_logs", [
   { name: "severity", type: "TEXT NOT NULL DEFAULT 'info'" },
 ]);
 
+// Seed default cyber-physical attack scenarios (including HOLLOW) into database
+try {
+  const seedScenarios = [
+    {
+      id: "hollow-substation-07",
+      sector: "power",
+      name: "ATTACK OF HOLLOW: Substation-07 Power Grid Cascade",
+      description:
+        "Targeted OT malware (ELECTRUM / Sandworm) exploiting IEC 60870-5-104 & IEC 61850 substation protocols. Silently overwrites PLC-7 ladder logic, walking frequency setpoints while disarming SIS safety interlocks to trip 14MW circuit breakers and trigger cascading power blackout.",
+      attack_type: "disruption",
+      adversary_profile: "Sandworm / ELECTRUM (APT44)",
+      is_public: 1,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: "operation-waterfall",
+      sector: "water",
+      name: "OPERATION WATERFALL: Municipal Chemical Dosing Overdose",
+      description:
+        "Volt Typhoon stealth intrusion exploiting contractor VPN credentials. Replays SCADA historian trends to mask a 6x chlorine dosing walk toward municipal reservoir distribution.",
+      attack_type: "sabotage",
+      adversary_profile: "Volt Typhoon / Industrial Sabre",
+      is_public: 1,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: "centrifuge-drift",
+      sector: "manufacturing",
+      name: "CENTRIFUGE DRIFT: High-Frequency Resonance Stuxnet Attack",
+      description:
+        "Stuxnet-derivative logic modification targeting Siemens S7 controllers. Drives high-speed centrifuges into destructive mechanical resonance band without triggering SCADA alarms.",
+      attack_type: "sabotage",
+      adversary_profile: "Equation Group / Olympic Games",
+      is_public: 1,
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: "blackout-pipeline",
+      sector: "oil-gas",
+      name: "BLACKOUT PIPELINE: Compressor Surge Cascade",
+      description:
+        "Creep attack on compressor discharge pressure. Throttles flare relief paths while bypassing SIL-3 safety instrumented systems.",
+      attack_type: "disruption",
+      adversary_profile: "DarkSide / Industrial Sabre",
+      is_public: 1,
+      created_at: new Date().toISOString(),
+    },
+  ];
+
+  const checkStmt = sqlite.prepare(
+    "SELECT COUNT(*) as count FROM simulation_scenarios WHERE id = ?",
+  );
+  const insertStmt = sqlite.prepare(`
+    INSERT INTO simulation_scenarios (id, sector, name, description, attack_type, adversary_profile, is_public, created_at)
+    VALUES (@id, @sector, @name, @description, @attack_type, @adversary_profile, @is_public, @created_at)
+  `);
+
+  for (const s of seedScenarios) {
+    const res = checkStmt.get(s.id) as { count: number };
+    if (res.count === 0) {
+      insertStmt.run(s);
+    }
+  }
+} catch (err) {
+  console.warn("Simulation scenarios seeding skipped:", err);
+}
+
 export const db = drizzle(sqlite, { schema });
 export { schema };

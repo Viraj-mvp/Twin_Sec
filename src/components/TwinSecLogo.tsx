@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useId } from "react";
 import { cn } from "@/lib/utils";
 
 interface TwinSecLogoProps extends React.SVGProps<SVGSVGElement> {
@@ -15,14 +15,21 @@ export function TwinSecLogo({
   className,
   ...props
 }: TwinSecLogoProps) {
+  const filterId = useId();
   const numericSize = typeof size === "number" ? size : parseInt(size as string, 10) || 36;
   const isLight = variant === "light";
 
+  // Filter out size-X classes from outer wrapper so emblem size is respected
+  const wrapperClassName = className
+    ?.split(" ")
+    .filter((c) => !/^size-\d+$/.test(c) && !/^w-\d+$/.test(c) && !/^h-\d+$/.test(c))
+    .join(" ");
+
   return (
-    <div className={cn("inline-flex items-center gap-3 select-none", className)}>
+    <div className={cn("inline-flex items-center gap-3 select-none shrink-0", wrapperClassName)}>
       {/* Bold Neo-Brutalist Emblem Badge */}
       <div
-        className="relative shrink-0 flex items-center justify-center bg-black border-2 border-black p-1 shadow-[3px_3px_0px_0px_#BFFF2E]"
+        className="relative shrink-0 flex items-center justify-center bg-black border-2 border-black p-1 shadow-[2px_2px_0px_0px_#BFFF2E]"
         style={{ width: numericSize + 8, height: numericSize + 8 }}
       >
         <svg
@@ -34,8 +41,8 @@ export function TwinSecLogo({
           {...props}
         >
           <defs>
-            {/* High-intensity Glow Filter */}
-            <filter id="twinsec-glow" x="-50%" y="-50%" width="200%" height="200%">
+            {/* High-intensity Glow Filter with Unique Instance ID */}
+            <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="3" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
@@ -100,7 +107,7 @@ export function TwinSecLogo({
 
           {/* Core Pulsing Threat / Signal Node */}
           <circle cx="50" cy="50" r="8" fill="#000000" stroke="#BFFF2E" strokeWidth="2.5" />
-          <circle cx="50" cy="50" r="4" fill="#BFFF2E" filter="url(#twinsec-glow)">
+          <circle cx="50" cy="50" r="4" fill="#BFFF2E" filter={`url(#${filterId})`}>
             <animate attributeName="r" values="3;5;3" dur="1.8s" repeatCount="indefinite" />
           </circle>
         </svg>

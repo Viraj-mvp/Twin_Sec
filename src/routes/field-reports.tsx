@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { handleSmartBack } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/field-reports")({
   head: () => ({
@@ -105,9 +106,13 @@ function FieldReports() {
     <main ref={rootRef} className="min-h-screen bg-paper text-ink">
       <header className="border-b-2 border-ink">
         <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-6 flex flex-wrap justify-between items-baseline gap-4 mono-label !text-ink">
-          <Link to="/" className="hover:text-accent">
-            ← TWINSEC BRIEFING
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
           <Link to="/case-files" className="text-accent font-bold animate-pulse">
             ★ EXPLORE INTERACTIVE CASE FILES →
           </Link>
@@ -244,9 +249,13 @@ function FieldReports() {
       <footer className="border-t-2 border-ink mt-24">
         <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-8 flex flex-wrap justify-between mono-label !text-ink/70 gap-3">
           <span>TWINSEC FIELD REPORTS · 2026</span>
-          <Link to="/" className="hover:text-accent">
-            ← RETURN TO BRIEFING
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
+          >
+            ← RETURN
+          </button>
         </div>
       </footer>
     </main>

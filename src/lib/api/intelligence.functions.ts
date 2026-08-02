@@ -164,8 +164,7 @@ Return strict JSON without markdown formatting.`,
       sector,
       name: (parsedScenario.name as string) || `AI Scenario: ${adversaryName}`,
       description: (parsedScenario.description as string) || prompt,
-      events:
-        (parsedScenario.events as Array<Record<string, string | number | boolean>>) || [],
+      events: (parsedScenario.events as Array<Record<string, string | number | boolean>>) || [],
       decisions:
         (parsedScenario.decisions as Array<Record<string, string | number | boolean>>) || [],
       savedToDb: saveToDb,

@@ -1,141 +1,218 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { THREAT_ACTORS } from "@/data/threat-actors";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { useState } from "react";
+import { THREAT_ACTORS, ThreatActorProfile } from "@/data/threat-actors";
+import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { handleSmartBack } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/threat-profiles/")({
   head: () => ({
     meta: [
-      { title: "TwinSec — The Mindhunter Module · Threat Actor Psychology" },
+      { title: "Mindhunter BAU — Threat Actor Psychology Dossiers" },
       {
         name: "description",
         content:
-          "Behavioral Analysis Unit dossier & post-capture interrogation interface for ICS threat actors.",
+          "Behavioral Analysis Unit dossiers & post-capture interrogation interface for ICS threat actors.",
+      },
+      { property: "og:title", content: "TwinSec — The Mindhunter Module" },
+      {
+        property: "og:description",
+        content: "Behavioral Science Unit dossiers & post-capture interrogation interface.",
       },
     ],
   }),
   component: ThreatProfilesIndex,
 });
 
-function ThreatProfilesIndex() {
+function Fig({ k, v }: { k: string; v: string }) {
   return (
-    <main className="min-h-screen bg-background text-foreground flex flex-col relative select-none">
+    <div className="mono-label">
+      <span className="block opacity-60 text-[10px]">{k}</span>
+      <span className="display text-2xl lg:text-3xl mt-0.5">{v}</span>
+    </div>
+  );
+}
+
+function ThreatProfilesIndex() {
+  const rootRef = useGsapReveal<HTMLElement>();
+  const [expandedId, setExpandedId] = useState<string | null>(THREAT_ACTORS[0].id);
+
+  return (
+    <main
+      ref={rootRef}
+      className="min-h-screen bg-background text-foreground flex flex-col relative select-none"
+    >
       <div className="absolute inset-0 grid-bg opacity-25 pointer-events-none" />
       <div className="absolute inset-0 scanline opacity-40 pointer-events-none" />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-rule bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo className="size-6" />
-            <Link
-              to="/"
-              className="display text-xl tracking-wide hover:text-accent transition-colors"
-            >
-              TwinSec
-            </Link>
-            <span className="mono-label hidden md:inline pl-3 text-red-500 font-bold">
-              ● THE MINDHUNTER MODULE
-            </span>
-          </div>
-          <div className="flex items-center gap-6 mono-label text-xs">
-            <Link to="/case-files" className="hover:text-accent transition-colors">
-              CASE FILES
-            </Link>
-            <Link
-              to="/simulation"
-              search={{ sector: "power" }}
-              className="hover:text-accent transition-colors"
-            >
-              CYBER RANGE
-            </Link>
-          </div>
+      {/* Editorial Header Strip (Clean, un-cluttered) */}
+      <header className="border-b border-rule z-10 bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-5 flex flex-wrap justify-between items-baseline gap-4 mono-label">
+          <button
+            type="button"
+            onClick={(e) => handleSmartBack(e)}
+            className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left flex items-center gap-2"
+          >
+            ← RETURN
+          </button>
+          <span className="text-danger font-bold uppercase">
+            ● FBI BEHAVIORAL ANALYSIS UNIT (BAU-4) DOSSIERS
+          </span>
+          <Link to="/case-files" className="hover:text-accent">
+            CASE FILES →
+          </Link>
         </div>
       </header>
 
-      {/* Hero Header */}
-      <section className="max-w-[1600px] mx-auto w-full px-6 lg:px-10 pt-12 pb-8 border-b border-rule">
-        <p className="mono-label text-red-500 tracking-widest uppercase">
-          FBI BEHAVIORAL ANALYSIS UNIT MODEL // ICS THREAT PSYCHOLOGY
-        </p>
-        <h1 className="display text-5xl sm:text-7xl mt-3 leading-none">THE MINDHUNTER MODULE</h1>
-        <p className="font-serif italic text-xl text-foreground/80 max-w-3xl mt-4 leading-relaxed">
-          "Before you can understand the answer, you have to understand the question."
-          <span className="block not-italic font-mono text-xs text-foreground/40 mt-1">
-            — Bill Tench, Behavioral Science Unit
-          </span>
-        </p>
+      {/* Poster Hero Header */}
+      <section className="relative border-b border-rule overflow-hidden">
+        <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-16 lg:py-28 grid grid-cols-12 gap-8">
+          <div className="col-span-12 md:col-span-8" data-reveal>
+            <p className="mono-label text-danger font-bold tracking-widest uppercase">
+              SECTION 04 — THREAT PSYCHOLOGY &amp; BEHAVIORAL ANALYSIS
+            </p>
+            <h1 className="display text-[14vw] md:text-[10vw] lg:text-[140px] leading-[0.84] mt-6 tracking-tight">
+              The Mindhunter
+              <br />
+              <span className="text-danger">Module.</span>
+              <br />
+              <span className="italic font-serif normal-case text-foreground/80">
+                ICS Threat Psychology
+              </span>
+            </h1>
+          </div>
+          <div
+            className="col-span-12 md:col-span-4 border-l border-rule pl-8 flex flex-col justify-end"
+            data-reveal
+          >
+            <p className="font-serif text-xl italic leading-snug text-foreground/80">
+              "Before you can understand the answer, you have to understand the question."
+              Behavioral Science Unit dossiers &amp; post-capture interrogation interface for
+              nation-state and criminal threat actors.
+            </p>
+            <div className="mt-8 grid grid-cols-3 gap-4 border-t border-rule pt-6">
+              <Fig k="ACTORS" v="8" />
+              <Fig k="INTERROG" v="LIVE" />
+              <Fig k="BAU" v="v2.4" />
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* Grid of Threat Profiles */}
+      {/* Editorial Threat Dossier Ledger */}
       <section className="max-w-[1600px] mx-auto w-full px-6 lg:px-10 py-12 flex-1">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {THREAT_ACTORS.map((actor) => (
-            <div
-              key={actor.id}
-              className="border-2 border-rule bg-card hover:border-danger shadow-comic-dark hover:shadow-comic-accent p-6 sm:p-8 flex flex-col justify-between transition-all group"
-            >
-              <div className="space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="mono-label text-[10px] text-danger font-bold px-2 py-0.5 border-2 border-danger/40 bg-danger/10 uppercase">
-                      {actor.classification.toUpperCase()}
-                    </span>
-                    <h2 className="display text-3xl sm:text-4xl mt-3 group-hover:text-danger transition-colors">
-                      {actor.name}
-                    </h2>
-                  </div>
-                  <span className="font-mono text-xs text-muted-foreground">{actor.origin}</span>
-                </div>
+        <div className="mono-label text-foreground/50 px-4 py-3 border-b border-rule grid grid-cols-12 gap-4 text-xs">
+          <span className="col-span-2">CLASSIFICATION</span>
+          <span className="col-span-3">ADVERSARY GROUP</span>
+          <span className="col-span-4">TARGET SECTORS</span>
+          <span className="col-span-3 text-right">ORIGIN · STATUS</span>
+        </div>
 
-                <p className="font-serif italic text-base text-foreground/80 leading-snug">
-                  {actor.primaryMotive}
-                </p>
-
-                <div className="border-t-2 border-rule pt-4 space-y-2 font-mono text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">ALIASES:</span>
-                    <span className="text-foreground">{actor.aliases.join(" · ")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">ACTIVE SINCE:</span>
-                    <span className="text-foreground">{actor.activeSince}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">KEY TARGETS:</span>
-                    <span className="text-accent font-bold">
-                      {actor.preferredTargets.map((t) => t.sector).join(", ")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-6 mt-6 border-t-2 border-rule flex items-center justify-between">
-                <Link
-                  to="/threat-profiles/$id"
-                  params={{ id: actor.id }}
-                  className="bg-danger/10 border-2 border-danger/50 text-danger hover:bg-danger hover:text-white px-5 py-2.5 font-mono text-xs font-bold transition-all uppercase tracking-wider shadow-comic-sm"
+        <div className="divide-y divide-rule border-b border-rule">
+          {THREAT_ACTORS.map((actor: ThreatActorProfile) => {
+            const open = expandedId === actor.id;
+            return (
+              <article key={actor.id} className="transition-colors" data-reveal>
+                <button
+                  onClick={() => setExpandedId(open ? null : actor.id)}
+                  aria-expanded={open}
+                  className="w-full text-left grid grid-cols-12 items-baseline gap-4 px-4 py-6 hover:bg-danger/5 group focus:outline-none"
                 >
-                  OPEN BAU DOSSIER & INTERROGATION →
-                </Link>
-                <Link
-                  to="/simulation"
-                  search={{
-                    sector: actor.scenarioId as
-                      | "power"
-                      | "water"
-                      | "oil-gas"
-                      | "manufacturing"
-                      | "port"
-                      | "smart-building"
-                      | "smart-city",
-                  }}
-                  className="mono-label text-xs hover:text-accent transition-colors"
-                >
-                  DRILL RANGE ⚡
-                </Link>
-              </div>
-            </div>
-          ))}
+                  <span className="col-span-2 mono-label text-xs">
+                    <span className="text-danger font-bold px-2 py-0.5 border border-danger/40 bg-danger/10 uppercase">
+                      {actor.classification}
+                    </span>
+                  </span>
+                  <span className="col-span-3 display text-2xl md:text-4xl group-hover:text-danger transition-colors leading-none">
+                    {actor.name}
+                  </span>
+                  <span className="col-span-4 mono-label text-xs uppercase text-foreground/70">
+                    {actor.preferredTargets.map((t) => t.sector).join(" · ")}
+                  </span>
+                  <span className="col-span-3 mono-label text-xs text-right text-foreground/60">
+                    {actor.origin} · {actor.activeSince}
+                  </span>
+                </button>
+
+                {open && (
+                  <div className="px-6 pb-8 pt-2 grid grid-cols-12 gap-8 bg-card/40 border-t border-rule/40">
+                    <div className="col-span-12 md:col-span-4 space-y-4">
+                      <div>
+                        <span className="mono-label text-[10px] text-danger">
+                          ALIASES &amp; CODENAMES
+                        </span>
+                        <p className="font-mono text-sm font-bold text-foreground mt-1">
+                          {actor.aliases.join(" · ")}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="mono-label text-[10px] text-foreground/50">
+                          PRIMARY MOTIVATION
+                        </span>
+                        <p className="font-serif italic text-base text-foreground/90 mt-1">
+                          {actor.primaryMotive}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="mono-label text-[10px] text-foreground/50">
+                          SIGNATURE BEHAVIORS
+                        </span>
+                        <ul className="list-disc list-inside space-y-1 mt-2 font-mono text-xs text-foreground/80">
+                          {actor.signatureBehaviors.map((b, idx) => (
+                            <li key={idx}>{b}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="col-span-12 md:col-span-8 space-y-6">
+                      <div>
+                        <span className="mono-label text-[10px] text-danger">
+                          BAU PSYCHOLOGICAL KEY INSIGHT
+                        </span>
+                        <p className="font-serif text-lg text-foreground/90 leading-relaxed mt-2">
+                          {actor.psychologicalProfile.keyInsight}
+                        </p>
+                      </div>
+
+                      <div className="border-t border-rule/50 pt-4">
+                        <span className="mono-label text-[10px] text-foreground/50 mb-3 block">
+                          KNOWN OPERATIONS
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {actor.knownOperations.map((op) => (
+                            <span
+                              key={op.name}
+                              className="mono-label text-[10px] px-2.5 py-1 border border-rule bg-background text-foreground/90"
+                            >
+                              <strong className="text-danger">{op.year}:</strong> {op.name} (
+                              {op.impact})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-4 pt-4 border-t border-rule/50">
+                        <Link
+                          to="/threat-profiles/$id"
+                          params={{ id: actor.id }}
+                          className="bg-danger text-white font-mono text-xs font-bold px-6 py-3 uppercase tracking-wider hover:bg-danger/90 transition-colors"
+                        >
+                          OPEN BAU DOSSIER &amp; LIVE INTERROGATION →
+                        </Link>
+                        <Link
+                          to="/simulation"
+                          search={{ sector: actor.scenarioId as any }}
+                          className="border border-rule font-mono text-xs px-6 py-3 uppercase hover:border-danger hover:text-danger transition-colors"
+                        >
+                          SIMULATE THREAT ACTOR ▶
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       </section>
     </main>

@@ -186,39 +186,6 @@ function TrainingLedgerPage() {
       <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
       <div className="absolute inset-0 scanline pointer-events-none opacity-45" />
 
-      {/* Header bar */}
-      <header className="sticky top-0 z-50 border-b border-rule bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo className="size-6" />
-            <Link
-              to="/"
-              className="display text-xl tracking-wide hover:text-accent transition-colors"
-            >
-              TwinSec
-            </Link>
-            <span className="mono-label hidden md:inline pl-3">TRAINING LEDGER</span>
-          </div>
-          <div className="flex items-center gap-6 mono-label text-xs">
-            <Link
-              to="/simulation"
-              search={{ sector: "power" }}
-              className="hover:text-accent transition-colors"
-            >
-              CYBER RANGE
-            </Link>
-            <Link to="/dashboard" className="hover:text-accent transition-colors">
-              DASHBOARD
-            </Link>
-            {session.loggedIn && (
-              <span className="text-accent border border-accent/30 bg-accent/10 px-3 py-1">
-                {session.callsign}
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <section className="flex-1 max-w-[1600px] mx-auto w-full px-6 lg:px-10 py-12 relative z-10 space-y-10">
         {/* Header Title */}
