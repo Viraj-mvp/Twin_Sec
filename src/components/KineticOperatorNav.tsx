@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "@tanstack/react-router";
 import gsap from "gsap";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,14 @@ export function KineticOperatorNav() {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAnimatingRef = useRef(false);
 
+  const go = useCallback(
+    (to: string) => {
+      closeMenu();
+      navigate({ to: to as never });
+    },
+    [navigate],
+  );
+
   // Keyboard Shortcuts (1-5 hotkeys, ESC close)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -96,7 +104,7 @@ export function KineticOperatorNav() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMenuOpen]);
+  }, [isMenuOpen, go]);
 
   // GSAP Menu Animations
   const openMenu = () => {
@@ -166,11 +174,6 @@ export function KineticOperatorNav() {
   const toggleMenu = () => {
     if (isMenuOpen) closeMenu();
     else openMenu();
-  };
-
-  const go = (to: string) => {
-    closeMenu();
-    navigate({ to: to as never });
   };
 
   const handleLogout = async () => {

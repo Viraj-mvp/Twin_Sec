@@ -11,7 +11,7 @@ import { useOperator } from "@/contexts/OperatorContext";
 import { logoutOperator } from "@/lib/api/auth.functions";
 import { Footer } from "../components/Footer";
 import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
-import { pushNavSection, getLastSection } from "@/lib/nav-stack";
+import { pushNavSection } from "@/lib/nav-stack";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -961,14 +961,16 @@ function Index() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const targetId = window.location.hash.replace("#", "") || getLastSection();
-    if (targetId) {
-      const el = document.getElementById(targetId);
+    const hash = window.location.hash.replace("#", "");
+    if (hash) {
+      const el = document.getElementById(hash);
       if (el) {
         setTimeout(() => {
           el.scrollIntoView({ behavior: "smooth" });
         }, 200);
       }
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
   }, []);
 

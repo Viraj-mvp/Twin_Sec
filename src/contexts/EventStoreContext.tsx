@@ -31,11 +31,12 @@ export function EventStoreProvider({ children }: { children: React.ReactNode }) 
   const [logRevision, setLogRevision] = useState<number>(0);
 
   const events = useMemo(() => {
-    // Re-evaluate whenever logRevision or activeBranchId changes
+    void logRevision;
     return eventStore.getEvents(undefined, activeBranchId);
   }, [eventStore, activeBranchId, logRevision]);
 
   const activeEvents = useMemo(() => {
+    void logRevision;
     return eventStore.getEvents(currentTime, activeBranchId);
   }, [eventStore, activeBranchId, currentTime, logRevision]);
 
@@ -108,6 +109,7 @@ export function EventStoreProvider({ children }: { children: React.ReactNode }) 
   return <EventStoreContext.Provider value={value}>{children}</EventStoreContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useEventStore() {
   const ctx = useContext(EventStoreContext);
   if (!ctx) {

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { CASE_FILES, CaseFile } from "@/data/case-files";
+import type { SectorId } from "@/data/scenarios";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { handleSmartBack } from "@/lib/nav-stack";
 
@@ -191,7 +192,7 @@ function CaseFilesIndex() {
                         </Link>
                         <Link
                           to="/simulation"
-                          search={{ sector: c.scenarioId as any }}
+                          search={{ sector: c.scenarioId as SectorId }}
                           className="border border-rule font-mono text-xs px-6 py-3 uppercase hover:border-accent hover:text-accent transition-colors"
                         >
                           REPLAY IN SIMULATION ▶

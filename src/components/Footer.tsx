@@ -1,13 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { TwinSecLogo } from "./TwinSecLogo";
+import { LivingInfrastructureLogo } from "./LivingInfrastructureLogo";
 
 export function Footer() {
   return (
     <footer className="border-t border-rule bg-background text-foreground py-16 px-6 lg:px-10 z-10 relative">
       <div className="mx-auto max-w-[1600px] grid grid-cols-12 gap-10">
         <div className="col-span-12 lg:col-span-5 space-y-6">
-          <div className="flex items-center gap-3">
-            <TwinSecLogo size="md" />
+          <div className="max-w-[280px]">
+            <LivingInfrastructureLogo />
           </div>
           <p className="font-serif italic text-base text-foreground/80 max-w-md leading-relaxed">
             "Software does not stop at the screen. Concrete moves. Turbines spin out of tolerance.

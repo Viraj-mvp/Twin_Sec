@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { SectorId } from "@/data/scenarios";
 import { generateContextHint } from "@/lib/api/role-briefing.functions";
 import type { GuidancePhase, OperationalRole } from "@/lib/briefing-types";
+import { attackEventBus } from "@/lib/event-bus";
 
 export interface HintAssistantPopoverEvent {
   kind: "popover";
@@ -72,6 +73,26 @@ export const HintAssistant: React.FC<HintAssistantProps> = ({
   useEffect(() => {
     if (lastHintHash) setHash(lastHintHash);
   }, [lastHintHash]);
+
+  // ── Event Bus subscription for popup hints ──────────────────────
+  useEffect(() => {
+    const unsub = attackEventBus.subscribe("popup.show", (ev) => {
+      const payload = ev.payload as Record<string, string> | undefined;
+      if (payload) {
+        setHintText(payload.text || "");
+        setLastDelivery("popover");
+        if (onPopover) {
+          onPopover({
+            kind: "popover",
+            nodeId: payload.nodeId || "ews-04",
+            title: payload.title || "ATTACK EVENT HINT",
+            hintText: payload.text || "",
+          });
+        }
+      }
+    });
+    return unsub;
+  }, [onPopover]);
 
   // ── Stuck-timer auto-trigger ────────────────────────────────────
   useEffect(() => {

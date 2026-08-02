@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { THREAT_ACTORS, ThreatActorProfile } from "@/data/threat-actors";
+import type { SectorId } from "@/data/scenarios";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { handleSmartBack } from "@/lib/nav-stack";
 
@@ -201,7 +202,7 @@ function ThreatProfilesIndex() {
                         </Link>
                         <Link
                           to="/simulation"
-                          search={{ sector: actor.scenarioId as any }}
+                          search={{ sector: actor.scenarioId as SectorId }}
                           className="border border-rule font-mono text-xs px-6 py-3 uppercase hover:border-danger hover:text-danger transition-colors"
                         >
                           SIMULATE THREAT ACTOR ▶

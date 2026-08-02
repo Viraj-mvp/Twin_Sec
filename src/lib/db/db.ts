@@ -125,6 +125,8 @@ autoMigrateTable("operators", [
   { name: "role", type: "TEXT NOT NULL DEFAULT 'operator'" },
 ]);
 
+autoMigrateTable("simulation_scenarios", [{ name: "is_public", type: "INTEGER DEFAULT 0" }]);
+
 // Migrate audit_logs table if training_run_id has NOT NULL constraint from legacy schema
 try {
   const auditLogCols = sqlite.pragma("table_info(audit_logs)") as Array<{

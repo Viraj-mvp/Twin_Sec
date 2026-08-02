@@ -9,6 +9,9 @@ import { Topology2D } from "@/components/simulation/Topology2D";
 import { ExplainableAIPanel } from "@/components/simulation/ExplainableAIPanel";
 import { SigmaRuleExport } from "@/components/simulation/SigmaRuleExport";
 import { CISAThreatFeed } from "@/components/simulation/CISAThreatFeed";
+import { MissionBriefing } from "@/components/simulation/MissionBriefing";
+import { getAttackScenario } from "@/simulation/scenarios";
+import { EXERCISES, type SectorId } from "@/data/scenarios";
 import {
   evaluateSimulationState,
   type SimulationGraphState,
@@ -24,83 +27,6 @@ const SECTOR_IDS = [
   "smart-building",
   "smart-city",
 ] as const;
-type SectorId = (typeof SECTOR_IDS)[number];
-
-export const EXERCISES: Record<
-  SectorId,
-  {
-    code: string;
-    title: string;
-    site: string;
-    byline: string;
-    adversary: string;
-    protocols: string;
-  }
-> = {
-  power: {
-    code: "HOLLOW",
-    title: "HOLLOW",
-    site: "Substation-07 · Sector 9",
-    byline:
-      "A relay misconfiguration cascades. 14 MW dropped. Hospital ring on generators before ops notice.",
-    adversary: "UNIT-414",
-    protocols: "MODBUS · S7 · DNP3",
-  },
-  water: {
-    code: "BASIN",
-    title: "BASIN",
-    site: "Municipal Works · Basin-3",
-    byline:
-      "Dosing setpoint walked +6×. Turbidity sensors report nominal. Two districts drink the drift.",
-    adversary: "AURA-9",
-    protocols: "MODBUS · OPC-UA · SCADA",
-  },
-  "oil-gas": {
-    code: "SEVENTH-BREATH",
-    title: "SEVENTH BREATH",
-    site: "Refinery Delta-12 · Tower T-A",
-    byline:
-      "Compressor discharge pressure walked. Safety solver disarmed. Twenty-two minutes to overpressure.",
-    adversary: "SILT-2",
-    protocols: "HART · FF · SIS PROFIsafe",
-  },
-  manufacturing: {
-    code: "MISFIRE",
-    title: "MISFIRE",
-    site: "Smart Factory · Line-A",
-    byline:
-      "Vision model swapped mid-shift. Defective parts pass. A recall assembles itself on the pallet.",
-    adversary: "MOTH-7",
-    protocols: "PROFINET · EtherCAT · OPC-UA",
-  },
-  port: {
-    code: "MANIFEST",
-    title: "MANIFEST",
-    site: "Port · Berth 7–14",
-    byline:
-      "TOS rewrites container destinations. Reefers land on dry stacks. Hazmat vanishes in the yard.",
-    adversary: "TIDE-3",
-    protocols: "EDIFACT · TOS API · AIS",
-  },
-  "smart-building": {
-    code: "STILL-AIR",
-    title: "STILL AIR",
-    site: "Tower · Midtown-North",
-    byline:
-      "BMS holds the doors and the temperature. Server room card readers set to always-unlock at 03:14.",
-    adversary: "FLOOR-0",
-    protocols: "BACnet · KNX · Modbus",
-  },
-  "smart-city": {
-    code: "GRIDLOCK",
-    title: "GRIDLOCK",
-    site: "Metro · Coastline-East",
-    byline:
-      "NOC routing tables poisoned. Signals freeze. EMS goes silent across two boroughs at rush hour.",
-    adversary: "HALO-1",
-    protocols: "MQTT · NTCIP · DNP3",
-  },
-};
 
 export const Route = createFileRoute("/simulation")({
   validateSearch: (s: Record<string, unknown>) => {
@@ -1569,18 +1495,21 @@ const fmt = (s: number) => {
 /* ------------------------------------------------------------------ */
 
 function SimulationPage() {
+  const search = Route.useSearch();
+  const sector: SectorId = search.sector ?? "power";
+  applyScenario(sector);
+  const exercise = EXERCISES[sector];
+  const currentScenario = useMemo(() => getAttackScenario(sector), [sector]);
+
+  const [viewPhase, setViewPhase] = useState<"briefing" | "live">("briefing");
   const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [targetSpeed, setTargetSpeed] = useState(60);
   const easedSpeed = useRef(60);
   const [displaySpeed, setDisplaySpeed] = useState(60);
   const [selected, setSelected] = useState<string | null>(null);
   const [impactKey, setImpactKey] = useState(0);
   const [activeDecision, setActiveDecision] = useState<Decision | null>(null);
-  const search = Route.useSearch();
-  const sector: SectorId = search.sector ?? "power";
-  applyScenario(sector);
-  const exercise = EXERCISES[sector];
 
   // Cyber Range CLI Kali Terminal State
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -1658,6 +1587,9 @@ function SimulationPage() {
 
   // Hydrate from share-link hash on mount
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     if (typeof window === "undefined") return;
@@ -1703,7 +1635,7 @@ function SimulationPage() {
     [t],
   );
 
-  // rAF loop with eased speed ramp for smooth frame-rate transitions
+  // rAF loop for smooth speed display transitions
   useEffect(() => {
     let raf = 0;
     const tick = (now: number) => {
@@ -1713,12 +1645,6 @@ function SimulationPage() {
       const k = 1 - Math.exp(-dt * 4);
       easedSpeed.current += (targetSpeed - easedSpeed.current) * k;
       setDisplaySpeed(easedSpeed.current);
-      if (playing) {
-        setT((prev) => {
-          const next = prev + dt * easedSpeed.current;
-          return next >= TOTAL ? TOTAL : next;
-        });
-      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -1726,7 +1652,7 @@ function SimulationPage() {
       cancelAnimationFrame(raf);
       lastTimeRef.current = null;
     };
-  }, [playing, targetSpeed]);
+  }, [targetSpeed]);
 
   const activeIdx = useMemo(() => EVENTS.reduce((acc, e, i) => (e.t <= t ? i : acc), -1), [t]);
 
@@ -1833,8 +1759,9 @@ function SimulationPage() {
         "    status               - Query live physics state (Hz, °C, bar), MTTD, MTTR & containment",
         "    clear                - Clear terminal console",
       );
-    } else if (cmd === "scan") {
-      newLogs.push("[*] SCANNING ICS TOPOLOGY NODES...");
+    } else if (cmd === "scan" || cmd === "start" || cmd === "init") {
+      setT(750);
+      newLogs.push("[*] EXERCISE INITIATED · SCANNING ICS TOPOLOGY NODES...");
       NODES.forEach((n) => {
         const isComp = compromisedNodes.has(n.id);
         const isIso = isolatedNodes.has(n.id);
@@ -1862,10 +1789,14 @@ function SimulationPage() {
         );
         if (targetNode) {
           setIsolatedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
-          if (firstActionTime === null) setFirstActionTime(t);
+          if (firstActionTime === null) setFirstActionTime(750);
+          setT(6000);
           newLogs.push(`[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) QUARANTINED.`);
           newLogs.push(
             `[*] OT routing table updated. Air-gap barrier engaged. Downstream lateral movement severed.`,
+          );
+          newLogs.push(
+            `[*] INTELLIGENCE: Containment verified. No further downstream nodes reachable.`,
           );
         } else {
           newLogs.push(
@@ -1901,7 +1832,8 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
-          if (firstActionTime === null) setFirstActionTime(t);
+          if (firstActionTime === null) setFirstActionTime(750);
+          setT(9000);
           newLogs.push(`[+] SUCCESS: Manual setpoint override issued to ${targetNode.id}.`);
           newLogs.push(`[*] Telemetry reset to nominal operational parameters.`);
         } else {
@@ -1919,7 +1851,8 @@ function SimulationPage() {
         );
         if (targetNode) {
           setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
-          if (firstActionTime === null) setFirstActionTime(t);
+          if (firstActionTime === null) setFirstActionTime(750);
+          setT(6000);
           newLogs.push(
             `[+] SUCCESS: Firmware cryptographic attestation patch deployed to ${targetNode.id}.`,
           );
@@ -1931,7 +1864,7 @@ function SimulationPage() {
         }
       }
     } else if (cmd === "status") {
-      newLogs.push(`[*] LIVE SCADA TELEMETRY & INCIDENT METRICS:`);
+      newLogs.push(`[*] LIVE REAL-TIME TELEMETRY & CONTAINMENT METRICS:`);
       newLogs.push(`    Rotor Speed:      ${speedHz.toFixed(2)} Hz`);
       newLogs.push(`    Bearing Temp:     ${bearingC.toFixed(1)} °C`);
       newLogs.push(`    Feeder Press:     ${pressure.toFixed(2)} bar`);
@@ -2198,7 +2131,19 @@ function SimulationPage() {
     } finally {
       setExporting(false);
     }
-  }, [t, targetSpeed, choices, outcome, compromisedNodes, activeIdx, playing]);
+  }, [t, targetSpeed, choices, outcome, compromisedNodes, activeIdx, playing, exercise]);
+
+  if (viewPhase === "briefing") {
+    return (
+      <MissionBriefing
+        scenario={currentScenario}
+        onStartSimulation={() => {
+          setViewPhase("live");
+          setPlaying(true);
+        }}
+      />
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col">
@@ -2209,30 +2154,96 @@ function SimulationPage() {
 
       <section className="grid grid-cols-12 border-b border-rule">
         {/* LEFT — meta */}
-        <aside className="col-span-12 lg:col-span-3 border-b lg:border-b-0 border-r-0 lg:border-r border-rule p-6 sm:p-8 lg:p-10 flex flex-col gap-8 lg:gap-10">
-          <div>
-            <p className="mono-label">EXERCISE · {sector.toUpperCase()}</p>
-            <h1 className="display text-5xl sm:text-6xl lg:text-7xl mt-3 leading-[0.85]">
-              {exercise.title}
-              <span className="text-accent">.</span>
-            </h1>
-            <p className="font-serif italic text-base sm:text-lg text-foreground/70 mt-4 leading-snug">
-              {exercise.site}. {exercise.byline}
+        <aside className="col-span-12 lg:col-span-3 border-b lg:border-b-0 border-r-0 lg:border-r border-rule p-6 sm:p-8 lg:p-10 flex flex-col gap-6 lg:gap-8 bg-card/20">
+          <div className="space-y-3">
+            <p className="mono-label text-foreground/60 text-xs tracking-widest uppercase">
+              TARGET SECTOR · {sector.toUpperCase()} // SEVERITY: CRITICAL
             </p>
+
+            <div>
+              <p className="mono-label text-foreground/40 text-[10px] tracking-wider uppercase">
+                EXERCISE HOLLOW · SUBSTATION-07 SUBSTATION CASCADE
+              </p>
+              <h1 className="display text-4xl sm:text-5xl lg:text-6xl mt-2 leading-[0.88] uppercase tracking-tight">
+                {exercise.title}
+                <span className="text-accent">.</span>
+              </h1>
+              <p className="font-serif italic text-sm sm:text-base text-foreground/80 mt-3 leading-snug">
+                {exercise.site}. {exercise.byline}
+              </p>
+            </div>
           </div>
 
           <div className="hairline" />
 
-          <dl className="grid grid-cols-2 gap-y-6 gap-x-4">
+          <dl className="grid grid-cols-2 gap-y-4 gap-x-4 font-mono text-xs">
             <Stat k="OPERATOR" v="N. ARENS" />
             <Stat k="ADVERSARY" v={exercise.adversary} />
             <Stat k="TWIN BUILD" v="2026.06.11" />
             <Stat k="PROTOCOLS" v={exercise.protocols} />
           </dl>
 
-          <div className="mt-auto">
-            <p className="mono-label">PHYSICS · LIVE</p>
-            <div className="mt-4 space-y-4">
+          {/* UNIFIED COMMAND & TASK HUB */}
+          <div className="border border-rule bg-card/40 p-4 space-y-3 font-mono text-xs">
+            <div className="flex items-center justify-between border-b border-rule pb-2">
+              <p className="mono-label text-[10px] text-accent font-bold uppercase tracking-wider">
+                COMMAND & TASK HUB
+              </p>
+              <span className="text-[9px] text-foreground/50">OPERATOR CONTROL</span>
+            </div>
+
+            <div className="space-y-2 text-[11px]">
+              <div className="flex items-start gap-2">
+                <span className="text-accent font-bold">[1]</span>
+                <span className="text-foreground/80">Scan SCADA nodes to map target topology</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-accent font-bold">[2]</span>
+                <span className="text-foreground/80">
+                  Isolate compromised PLC-3 via air-gap barrier
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-accent font-bold">[3]</span>
+                <span className="text-foreground/80">Apply firmware patch to PLC-3</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-accent font-bold">[4]</span>
+                <span className="text-foreground/80">
+                  Override setpoints on PLC-7 & query status
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setTerminalOpen(true);
+                  const fakeForm = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
+                  setTerminalInput("scan");
+                  setTimeout(() => handleTerminalSubmit(fakeForm), 50);
+                }}
+                className="w-full border border-accent bg-accent text-accent-foreground py-2 font-bold hover:bg-foreground hover:text-background transition-colors cursor-pointer text-center uppercase tracking-wider text-[11px]"
+              >
+                LAUNCH CLI & EXECUTE SCAN →
+              </button>
+              <button
+                onClick={() => setViewPhase("briefing")}
+                className="w-full border border-rule bg-background/40 text-foreground/70 py-1.5 font-bold hover:border-accent hover:text-accent transition-colors cursor-pointer text-center text-[10px] uppercase tracking-wider"
+              >
+                PRE-SIMULATION MISSION BRIEFING
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-auto pt-4 border-t border-rule">
+            <div className="flex justify-between items-center mb-3">
+              <p className="mono-label text-[10px] text-accent">PHYSICS · EVENT ENGINE LIVE</p>
+              <span className="text-[9px] font-mono text-foreground/50 uppercase">
+                REAL-TIME MATH
+              </span>
+            </div>
+            <div className="space-y-3">
               <Gauge label="ROTOR" unit="Hz" value={speedHz} min={48} max={54} crit={52.5} />
               <Gauge label="BEARING" unit="°C" value={bearingC} min={50} max={120} crit={95} />
               <Gauge label="FEEDER" unit="bar" value={pressure} min={6} max={9} crit={7} invert />
@@ -2331,29 +2342,6 @@ function SimulationPage() {
           </button>
         </aside>
       </section>
-
-      {/* TRANSPORT */}
-      <Transport
-        t={t}
-        setT={(n) => {
-          setT(n);
-          // re-arm prompts when scrubbing back
-          promptedRef.current = new Set(
-            Array.from(promptedRef.current).filter((id) => {
-              const d = DECISIONS.find((x) => x.id === id);
-              return d ? d.t <= n : false;
-            }),
-          );
-          lastIdxRef.current = EVENTS.reduce((acc, e, i) => (e.t <= n ? i : acc), -1);
-        }}
-        playing={playing}
-        setPlaying={setPlaying}
-        speed={targetSpeed}
-        setSpeed={setTargetSpeed}
-        displaySpeed={displaySpeed}
-        activeIdx={activeIdx}
-        choices={choices}
-      />
 
       {/* TIMELINE / LOG */}
       <section className="border-b border-rule">
@@ -2662,7 +2650,7 @@ function SimulationPage() {
       {/* Floating Cyber Range CLI Terminal Trigger FAB */}
       <TerminalFAB isOpen={terminalOpen} onToggle={() => setTerminalOpen(!terminalOpen)} />
 
-      {/* Draggable Kali-style Cyber Range CLI Terminal */}
+      {/* Minimalist Brutalist Cyber Range CLI Terminal */}
       <KaliTerminal
         terminalOpen={terminalOpen}
         setTerminalOpen={setTerminalOpen}
@@ -2675,6 +2663,10 @@ function SimulationPage() {
         terminalInput={terminalInput}
         setTerminalInput={setTerminalInput}
         handleTerminalSubmit={handleTerminalSubmit}
+        t={t}
+        compromisedCount={compromisedNodes.size}
+        isolatedCount={isolatedNodes.size}
+        patchedCount={patchedNodes.size}
       />
 
       {/* ASSET DOSSIER MODAL OVERLAY */}
@@ -3104,141 +3096,6 @@ function Topology({
         </g>
       ))}
     </svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  TRANSPORT                                                         */
-/* ------------------------------------------------------------------ */
-
-function Transport({
-  t,
-  setT,
-  playing,
-  setPlaying,
-  speed,
-  setSpeed,
-  displaySpeed,
-  activeIdx,
-  choices,
-}: {
-  t: number;
-  setT: (n: number) => void;
-  playing: boolean;
-  setPlaying: (b: boolean) => void;
-  speed: number;
-  setSpeed: (n: number) => void;
-  displaySpeed: number;
-  activeIdx: number;
-  choices: Record<string, ChoiceId>;
-}) {
-  const pct = (t / TOTAL) * 100;
-  return (
-    <section
-      className="border-b border-rule bg-muted/30 sticky top-0 z-30 backdrop-blur"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
-    >
-      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-4 sm:py-6 flex flex-wrap items-center gap-4 sm:gap-6">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPlaying(!playing)}
-            className="size-11 sm:size-12 bg-accent text-accent-foreground display text-xl sm:text-2xl flex items-center justify-center hover:bg-foreground hover:text-background transition-colors"
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? "❚❚" : "▶"}
-          </button>
-          <button
-            onClick={() => setT(0)}
-            className="size-11 sm:size-12 border border-rule mono-label hover:border-accent hover:text-accent transition-colors"
-            aria-label="Restart"
-          >
-            ↺
-          </button>
-        </div>
-
-        <div className="mono-label tabular-nums">
-          T+{fmt(t)} <span className="text-foreground/40">/ {fmt(TOTAL)}</span>
-        </div>
-
-        <div className="order-last sm:order-none flex-1 basis-full sm:basis-auto min-w-[200px] relative h-12 flex items-center">
-          {/* progress track + filled segment */}
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] bg-rule" />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-[3px] bg-accent transition-[width] duration-100"
-            style={{ left: 0, width: `${pct}%` }}
-          />
-          {/* event markers — sync log + topology when clicked */}
-          {EVENTS.map((e, i) => (
-            <button
-              key={i}
-              onClick={() => setT(e.t + 0.1)}
-              title={`T+${fmt(e.t)} · ${e.tag}: ${e.title}`}
-              className="absolute -translate-x-1/2 group z-10"
-              style={{ left: `${(e.t / TOTAL) * 100}%` }}
-            >
-              <span
-                className={`block size-3 ${i <= activeIdx ? sevColor(e.sev) : "bg-rule"} group-hover:scale-150 transition-transform`}
-              />
-              {i === activeIdx && (
-                <span className="absolute -top-5 left-1/2 -translate-x-1/2 mono-label text-accent whitespace-nowrap">
-                  ▼
-                </span>
-              )}
-            </button>
-          ))}
-          {/* decision markers above track */}
-          {DECISIONS.map((d) => (
-            <span
-              key={d.id}
-              className="absolute -translate-x-1/2 -bottom-1 z-10"
-              style={{ left: `${(d.t / TOTAL) * 100}%` }}
-              title={d.question}
-            >
-              <span
-                className={`block w-0 h-0 border-x-[5px] border-x-transparent border-t-[7px] ${choices[d.id] ? "border-t-accent" : "border-t-foreground/60"}`}
-              />
-            </span>
-          ))}
-          <input
-            type="range"
-            min={0}
-            max={TOTAL}
-            step={1}
-            value={Math.round(t)}
-            onChange={(e) => setT(Number(e.target.value))}
-            className="absolute inset-0 w-full opacity-0 cursor-pointer z-20"
-            aria-label="Scrub timeline"
-          />
-          <div
-            className="absolute -translate-x-1/2 pointer-events-none flex flex-col items-center top-0 bottom-0"
-            style={{ left: `${pct}%` }}
-          >
-            <span className="block w-px h-full bg-accent" />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 mono-label">
-          <span className="hidden sm:inline">SPEED</span>
-          {[15, 60, 240, 600].map((s) => {
-            const active = speed === s;
-            const live = active && Math.abs(displaySpeed - s) > 2;
-            return (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`px-2.5 sm:px-3 py-2 border tabular-nums transition-colors ${
-                  active
-                    ? "bg-accent text-accent-foreground border-accent"
-                    : "border-rule hover:border-accent hover:text-accent"
-                } ${live ? "animate-pulse" : ""}`}
-              >
-                {s}×
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </section>
   );
 }
 
