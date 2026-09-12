@@ -163,3 +163,63 @@ Provide a structured explanation in JSON:
       }
     },
   );
+
+export const getSelfLearningAdaptiveProfile = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      operatorId: z.string().optional(),
+      totalCommandsExecuted: z.number().default(0),
+      errorCount: z.number().default(0),
+      avgReactionTimeMs: z.number().default(4000),
+      preferredRole: z.enum(["RED", "BLUE"]).default("BLUE"),
+      currentSector: z.string().default("power"),
+    }),
+  )
+  .handler(
+    async ({
+      data,
+    }: {
+      data: {
+        operatorId?: string;
+        totalCommandsExecuted: number;
+        errorCount: number;
+        avgReactionTimeMs: number;
+        preferredRole: "RED" | "BLUE";
+        currentSector: string;
+      };
+    }) => {
+      const errorRate =
+        data.totalCommandsExecuted > 0 ? data.errorCount / data.totalCommandsExecuted : 0;
+
+      let skillTier: "NOVICE" | "TACTICAL_OPERATOR" | "CYBER_PHYSICAL_ARCHITECT" =
+        "TACTICAL_OPERATOR";
+
+      if (data.totalCommandsExecuted > 15 && errorRate < 0.15 && data.avgReactionTimeMs < 3000) {
+        skillTier = "CYBER_PHYSICAL_ARCHITECT";
+      } else if (data.totalCommandsExecuted < 5 || errorRate > 0.4) {
+        skillTier = "NOVICE";
+      }
+
+      const propagationMultiplier =
+        skillTier === "CYBER_PHYSICAL_ARCHITECT" ? 1.5 : skillTier === "NOVICE" ? 0.75 : 1.0;
+
+      const aiRecommendation =
+        skillTier === "CYBER_PHYSICAL_ARCHITECT"
+          ? `High-velocity operator detected in ${data.currentSector.toUpperCase()} sector. Attack propagation accelerated to 1.5x. Multi-stage APT chain active.`
+          : skillTier === "NOVICE"
+            ? `Guided assist enabled for ${data.preferredRole} Cell. AI step hints calibrated for ${data.currentSector.toUpperCase()} sector.`
+            : `Balanced tactical profile for ${data.preferredRole} Cell in ${data.currentSector.toUpperCase()} sector.`;
+
+      return {
+        success: true,
+        profile: {
+          skillTier,
+          errorRate: Math.round(errorRate * 100),
+          propagationMultiplier,
+          aiRecommendation,
+          adaptiveSector: data.currentSector,
+          rolePreference: data.preferredRole,
+        },
+      };
+    },
+  );

@@ -5,7 +5,9 @@
  */
 
 import type { AttackScenario } from "./types";
-import { DEFAULT_NODES, EDGES, DEFAULT_DECISIONS } from "@/data/scenarios";
+import { SECTOR_TOPOLOGIES, DEFAULT_DECISIONS } from "@/data/scenarios";
+
+const cityTopo = SECTOR_TOPOLOGIES["smart-city"];
 
 export const DDOS_SCENARIO: AttackScenario = {
   id: "ddos",
@@ -22,8 +24,8 @@ export const DDOS_SCENARIO: AttackScenario = {
   duration: 9600,
   severity: "HIGH",
   mitreMapping: ["T0814", "T0886", "T0826"],
-  nodes: DEFAULT_NODES.map((n) => ({ ...n })),
-  edges: EDGES.map((e) => ({ ...e })),
+  nodes: cityTopo.nodes.map((n) => ({ ...n })),
+  edges: cityTopo.edges.map((e) => ({ ...e })),
   decisions: DEFAULT_DECISIONS.map((d) => ({ ...d })),
   events: [
     {
@@ -31,23 +33,23 @@ export const DDOS_SCENARIO: AttackScenario = {
       time: 0,
       type: "network.node",
       tag: "DISRUPTION",
-      node: "switch-a",
+      node: "noc",
       title: "SCADA network flood started",
-      desc: "Massive DNP3 and Modbus frame storm initiated (145,000 pps). OT switch buffers exhausted.",
+      desc: "Massive DNP3 and NTCIP frame storm initiated (145,000 pps). NOC-RT router buffers exhausted.",
       sev: "HIGH",
       lifecycleState: "Impact",
       payload: {
         command: "hping3 -S -p 502 --flood 192.168.20.42",
-        output: "[!] Packet storm active: 145,000 pps targeting OT Switch SW-A.",
+        output: "[!] Packet storm active: 145,000 pps targeting NOC Router NOC-RT.",
         logEntry: {
           level: "CRITICAL",
-          source: "SW-A",
-          message: "SWITCH BUFFER OVERFLOW: Packet loss > 84% on OT-100 VLAN.",
+          source: "NOC-RT",
+          message: "ROUTER BUFFER OVERFLOW: Packet loss > 84% on OT-100 VLAN.",
         },
         popupHint: {
           title: "SCADA DENIAL OF SERVICE",
-          text: "Packet storm flooding OT Switch SW-A! Telemetry feeds are dropping.",
-          nodeId: "switch-a",
+          text: "Packet storm flooding NOC Router NOC-RT! Telemetry feeds are dropping.",
+          nodeId: "noc",
         },
       },
     },
@@ -56,16 +58,16 @@ export const DDOS_SCENARIO: AttackScenario = {
       time: 2100,
       type: "network.node",
       tag: "COMM TIMEOUT",
-      node: "plc-3",
-      title: "PLC controller heartbeat lost",
-      desc: "SCADA master lost communication with PLC-3 due to channel saturation.",
+      node: "traffic",
+      title: "TSC-CTL controller heartbeat lost",
+      desc: "SCADA master lost communication with Traffic Signal Controller TSC-CTL due to channel saturation.",
       sev: "CRITICAL",
       lifecycleState: "Impact",
       payload: {
         logEntry: {
           level: "CRITICAL",
-          source: "HMI-11",
-          message: "HEARTBEAT TIMEOUT: PLC-3 disconnected from SCADA poll group.",
+          source: "NOC-RT",
+          message: "HEARTBEAT TIMEOUT: TSC-CTL disconnected from SCADA poll group.",
         },
       },
     },
@@ -74,7 +76,7 @@ export const DDOS_SCENARIO: AttackScenario = {
     overview: {
       title: "EXERCISE GRIDLOCK · METRO SCADA DENIAL OF SERVICE",
       summary:
-        "Adversary HALO-1 initiated a high-volume packet storm flooding OT network switches across Metro Coastline-East. SCADA polling frames are being dropped, causing signal controllers to enter fail-safe freezing states. Your objective is to rate-limit traffic on OT switches and restore telemetry polling.",
+        "Adversary HALO-1 initiated a high-volume packet storm flooding NOC routers across Metro Coastline-East. SCADA polling frames are being dropped, causing signal controllers to enter fail-safe freezing states. Your objective is to rate-limit traffic on NOC routers and restore telemetry polling.",
       targetInfrastructure: "Metro Traffic NOC & Rail Signal Network",
       threatActor: "HALO-1 (City Infrastructure Disruption Group)",
       businessImpact:
@@ -85,16 +87,22 @@ export const DDOS_SCENARIO: AttackScenario = {
       "Apply rate-limiting and VLAN isolation.",
     ],
     scope: {
-      included: ["✔ DNP3 / Modbus Packet Storms", "✔ OT Switch Buffer Exhaustion"],
+      included: ["✔ DNP3 / NTCIP Packet Storms", "✔ NOC Router Buffer Exhaustion"],
       excluded: ["✖ Internet BGP routing hijacking"],
     },
     attackIntent: {
       narrative:
         "HALO-1 seeks to paralyze metro traffic signals by saturating SCADA communications.",
-      attackerGoals: ["Saturate OT switch buffers.", "Force PLC polling timeouts."],
+      attackerGoals: ["Saturate NOC router buffers.", "Force TSC-CTL polling timeouts."],
     },
     infrastructure: [
-      { assetName: "SW-A", role: "Industrial Switch", purdueLevel: "Level 2", nodeId: "switch-a" },
+      { assetName: "NOC-RT", role: "NOC Router", purdueLevel: "Level 3", nodeId: "noc" },
+      {
+        assetName: "TSC-CTL",
+        role: "Traffic Signal Ctrl",
+        purdueLevel: "Level 1",
+        nodeId: "traffic",
+      },
     ],
     mitreOverview: [
       {
@@ -110,7 +118,7 @@ export const DDOS_SCENARIO: AttackScenario = {
     guidedHints: [
       {
         triggerEventId: "d-0",
-        hintText: "Packet storm detected on SW-A. Open Kali CLI and isolate affected ports.",
+        hintText: "Packet storm detected on NOC-RT. Open Kali CLI and isolate affected ports.",
       },
     ],
     helpContent: {

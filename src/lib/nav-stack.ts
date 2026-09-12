@@ -81,3 +81,10 @@ export function handleSmartBack(e?: React.MouseEvent, fallbackPath = "/") {
     window.location.href = prev || fallbackPath;
   }
 }
+
+export function handleSmartForward(e?: React.MouseEvent) {
+  if (e) e.preventDefault();
+  if (typeof window !== "undefined") {
+    window.history.forward();
+  }
+}

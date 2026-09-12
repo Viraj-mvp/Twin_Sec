@@ -59,27 +59,6 @@ export function TwinSecLogo({
             strokeWidth="3.5"
           />
 
-          {/* Outer Radar Reticle Ring */}
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            fill="none"
-            stroke="#F5F3E7"
-            strokeWidth="1.5"
-            strokeDasharray="4 6"
-            opacity="0.5"
-          >
-            <animateTransform
-              attributeName="transform"
-              type="rotate"
-              from="0 50 50"
-              to="360 50 50"
-              dur="40s"
-              repeatCount="indefinite"
-            />
-          </circle>
-
           {/* CYBER TWIN SHIELD 1 (Acid Lime Left Polygon) */}
           <polygon
             points="50,15 20,38 20,68 50,85"

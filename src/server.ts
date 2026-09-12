@@ -43,8 +43,12 @@ function isRateLimited(request: Request): { limited: boolean; remaining: number;
   const path = url.pathname;
   const config = getRateLimitConfig(path);
 
-  // Get client identifier (in production, use X-Forwarded-For or similar if behind a proxy)
-  const clientId = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown-client";
+  // Get client identifier (prioritizing trusted reverse proxy headers)
+  const cfIp = request.headers.get("cf-connecting-ip");
+  const realIp = request.headers.get("x-real-ip");
+  const forwarded = request.headers.get("x-forwarded-for");
+  const clientId =
+    cfIp || realIp || (forwarded ? forwarded.split(",")[0].trim() : "internal-client");
   const key = `${clientId}:${path}`;
 
   const now = Date.now();

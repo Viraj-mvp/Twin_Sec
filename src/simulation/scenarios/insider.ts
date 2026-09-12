@@ -5,7 +5,9 @@
  */
 
 import type { AttackScenario } from "./types";
-import { DEFAULT_NODES, EDGES, DEFAULT_DECISIONS } from "@/data/scenarios";
+import { SECTOR_TOPOLOGIES, DEFAULT_DECISIONS } from "@/data/scenarios";
+
+const buildingTopo = SECTOR_TOPOLOGIES["smart-building"];
 
 export const INSIDER_SCENARIO: AttackScenario = {
   id: "insider",
@@ -22,8 +24,8 @@ export const INSIDER_SCENARIO: AttackScenario = {
   duration: 9600,
   severity: "HIGH",
   mitreMapping: ["T0812", "T0855", "T0836"],
-  nodes: DEFAULT_NODES.map((n) => ({ ...n })),
-  edges: EDGES.map((e) => ({ ...e })),
+  nodes: buildingTopo.nodes.map((n) => ({ ...n })),
+  edges: buildingTopo.edges.map((e) => ({ ...e })),
   decisions: DEFAULT_DECISIONS.map((d) => ({ ...d })),
   events: [
     {
@@ -31,9 +33,9 @@ export const INSIDER_SCENARIO: AttackScenario = {
       time: 0,
       type: "network.node",
       tag: "INSIDER ACTIVITY",
-      node: "ews-04",
+      node: "bms",
       title: "Legitimate admin session logged",
-      desc: "Disgruntled technician logged into EWS-04 using valid smartcard credentials at 03:14.",
+      desc: "Disgruntled technician logged into BMS-GW Gateway using valid smartcard credentials at 03:14.",
       sev: "MEDIUM",
       lifecycleState: "Execution",
       payload: {
@@ -41,7 +43,7 @@ export const INSIDER_SCENARIO: AttackScenario = {
         output: "[+] BACnet Object AccessControl:Door_04 set to ALWAYS_UNLOCK.",
         logEntry: {
           level: "WARN",
-          source: "EWS-04",
+          source: "BMS-GW",
           message: "Valid smartcard logon outside normal shift hours (03:14 AM).",
         },
       },
@@ -51,21 +53,21 @@ export const INSIDER_SCENARIO: AttackScenario = {
       time: 1800,
       type: "network.node",
       tag: "BYPASS",
-      node: "plc-3",
+      node: "locks",
       title: "Physical card readers disabled",
-      desc: "Server room access doors unlocked permanently in BMS controller memory.",
+      desc: "Server room access doors unlocked permanently in LOCK-SYS controller memory.",
       sev: "CRITICAL",
       lifecycleState: "Impact",
       payload: {
         logEntry: {
           level: "CRITICAL",
-          source: "PLC-3",
+          source: "LOCK-SYS",
           message: "PHYSICAL SECURITY BYPASS: Server Room card reader set to ALWAYS_UNLOCKED.",
         },
         popupHint: {
           title: "INSIDER THREAT BYPASS",
           text: "Physical access control doors were unlocked via direct BACnet write.",
-          nodeId: "plc-3",
+          nodeId: "locks",
         },
       },
     },
@@ -90,10 +92,17 @@ export const INSIDER_SCENARIO: AttackScenario = {
     attackIntent: {
       narrative:
         "FLOOR-0 seeks to disable physical access control barriers to enable unmonitored server room access.",
-      attackerGoals: ["Log into EWS-04 with smartcard.", "Write ALWAYS_UNLOCK to door object."],
+      attackerGoals: ["Log into BMS-GW with smartcard.", "Write ALWAYS_UNLOCK to door object."],
     },
     infrastructure: [
-      { assetName: "EWS-04", role: "Workstation", purdueLevel: "Level 4", nodeId: "ews-04" },
+      { assetName: "BMS-GW", role: "BACnet Gateway", purdueLevel: "Level 4", nodeId: "bms" },
+      {
+        assetName: "LOCK-SYS",
+        role: "Access Control Panel",
+        purdueLevel: "Level 2",
+        nodeId: "locks",
+      },
+      { assetName: "AHU-MDF", role: "Server Air Handler", purdueLevel: "Level 2", nodeId: "ahu" },
     ],
     mitreOverview: [
       {
@@ -110,7 +119,7 @@ export const INSIDER_SCENARIO: AttackScenario = {
       {
         triggerEventId: "i-1",
         hintText:
-          "Door access reader unlocked. Use 'patch plc-3' in Kali CLI to re-lock controllers.",
+          "Door access reader unlocked. Use 'patch locks' in Kali CLI to re-lock controllers.",
       },
     ],
     helpContent: { idleSuggestionText: "Review administrative login audit logs.", commonFAQ: [] },

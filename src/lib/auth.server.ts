@@ -77,15 +77,26 @@ function serializeCookie(
 // `getRequestHeader` / `setResponseHeader` from `@tanstack/react-start/server`
 // (this writes the Set-Cookie onto the actual HTTP response the browser
 // receives, so the session persists across requests).
+export function isSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE === "true") return true;
+  if (process.env.COOKIE_SECURE === "false") return false;
+  return process.env.NODE_ENV === "production" || process.env.HTTPS === "true";
+}
+
+export function getSameSiteOption(): "lax" | "strict" {
+  return (process.env.COOKIE_SAMESITE as "lax" | "strict") || "lax";
+}
+
 export function setSessionCookie(token: string) {
   try {
-    const secure = process.env.NODE_ENV === "production";
+    const secure = isSecureCookie();
+    const sameSite = getSameSiteOption();
     setResponseHeader(
       "Set-Cookie",
       serializeCookie(COOKIE_NAME, token, {
         httpOnly: true,
         secure,
-        sameSite: "lax",
+        sameSite,
         maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
         path: "/",
       }),
@@ -115,10 +126,14 @@ export function getSessionCookie(): string | undefined {
 
 export function deleteSessionCookie() {
   try {
+    const secure = isSecureCookie();
+    const sameSite = getSameSiteOption();
     setResponseHeader(
       "Set-Cookie",
       serializeCookie(COOKIE_NAME, "", {
         httpOnly: true,
+        secure,
+        sameSite,
         path: "/",
         maxAge: 0,
         expires: new Date(0),

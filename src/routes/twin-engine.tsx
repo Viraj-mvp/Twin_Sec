@@ -613,9 +613,9 @@ function DependencyGraph({
               y1={pa.y * 0.5}
               x2={pb.x}
               y2={pb.y * 0.5}
-              stroke={isLive ? "#BFFF2E" : "#27272A"}
-              strokeWidth={isLive ? 0.35 : 0.15}
-              opacity={isLive ? 0.9 : 0.4}
+              stroke={isLive ? "#00C2CB" : "#475569"}
+              strokeWidth={isLive ? 2.5 : 2}
+              opacity={isLive ? 1 : 0.7}
               vectorEffect="non-scaling-stroke"
             />
 
@@ -625,11 +625,11 @@ function DependencyGraph({
               y1={pa.y * 0.5}
               x2={pb.x}
               y2={pb.y * 0.5}
-              stroke={isLive ? "#BFFF2E" : "#3F3F46"}
-              strokeWidth={isLive ? 0.6 : 0.25}
-              strokeDasharray="0.8 3"
+              stroke={isLive ? "#00C2CB" : "#64748B"}
+              strokeWidth={isLive ? 2 : 1.5}
+              strokeDasharray="4 6"
               vectorEffect="non-scaling-stroke"
-              opacity={isLive ? 1 : 0.5}
+              opacity={isLive ? 1 : 0.6}
             >
               <animate
                 attributeName="stroke-dashoffset"

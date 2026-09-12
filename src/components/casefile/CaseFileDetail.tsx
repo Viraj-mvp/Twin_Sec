@@ -46,11 +46,20 @@ export function CaseFileDetail({ caseFile: c }: CaseFileDetailProps) {
             </h1>
             <p className="text-sm text-zinc-700 font-bold uppercase mt-1">{c.subtitle}</p>
           </div>
-          <div className="text-right">
-            <span className="block text-xs font-bold text-zinc-600">INCIDENT TIMEFRAME</span>
-            <span className="text-sm font-black text-black bg-white px-3 py-1 border-2 border-black inline-block mt-1">
-              {c.incidentDate}
-            </span>
+          <div className="text-right space-y-2">
+            <div>
+              <span className="block text-xs font-bold text-zinc-600">INCIDENT TIMEFRAME</span>
+              <span className="text-sm font-black text-black bg-white px-3 py-1 border-2 border-black inline-block mt-1">
+                {c.incidentDate}
+              </span>
+            </div>
+            <Link
+              to="/simulation"
+              search={{ sector: c.scenarioId } as never}
+              className="bg-[#BFFF2E] text-black border-3 border-black px-4 py-2 font-mono text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_#000000] hover:bg-lime-400 hover:-translate-y-0.5 transition-all inline-flex items-center gap-2 cursor-pointer"
+            >
+              <span>⚡ LAUNCH REENACTMENT SIMULATION →</span>
+            </Link>
           </div>
         </div>
 

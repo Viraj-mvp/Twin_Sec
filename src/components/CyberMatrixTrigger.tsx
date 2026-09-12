@@ -72,7 +72,7 @@ export const CyberMatrixTrigger = React.forwardRef<HTMLButtonElement, CyberMatri
                 : "border-[#27272A] bg-[#18181B] text-[#BFFF2E]",
             )}
           >
-            CTF // SIGN-IN
+            OPERATOR PORTAL
           </span>
         )}
 

@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useOperatorSession } from "@/lib/auth-store";
 import { TwinSecLogo } from "@/components/TwinSecLogo";
 
 export const Route = createFileRoute("/terms")({
@@ -17,8 +16,6 @@ export const Route = createFileRoute("/terms")({
 });
 
 function TermsPage() {
-  const { session } = useOperatorSession();
-
   return (
     <main className="min-h-screen bg-background text-foreground flex flex-col relative select-none">
       {/* Background blueprint details */}
@@ -27,7 +24,7 @@ function TermsPage() {
 
       {/* Main Content Container */}
       <section className="flex-1 max-w-[1000px] mx-auto w-full px-6 py-12 relative z-10 font-mono">
-        <div className="border border-rule bg-background/95 p-6 sm:p-10 backdrop-blur space-y-8">
+        <div className="border-2 border-black bg-[#121214] p-6 sm:p-10 shadow-[6px_6px_0px_0px_#000000] space-y-8">
           <div>
             <p className="mono-label text-accent text-xs">TACTICAL DIRECTIVE // TERM-09</p>
             <h1 className="display text-4xl sm:text-5xl mt-2 leading-none">TERMS OF SERVICE</h1>

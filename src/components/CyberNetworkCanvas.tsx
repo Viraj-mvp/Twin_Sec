@@ -133,6 +133,9 @@ export function CyberNetworkCanvas({ className = "" }: { className?: string }) {
       }
     };
 
+    let isVisible = true;
+    let isTabVisible = typeof document !== "undefined" ? !document.hidden : true;
+
     // Main Render Loop
     const render = (timestamp: number) => {
       ctx.clearRect(0, 0, width, height);
@@ -247,17 +250,12 @@ export function CyberNetworkCanvas({ className = "" }: { className?: string }) {
         const prevX = nFrom.x + (nTo.x - nFrom.x) * Math.max(0, p.progress - 0.06);
         const prevY = nFrom.y + (nTo.y - nFrom.y) * Math.max(0, p.progress - 0.06);
         ctx.moveTo(currX, currY);
-        ctx.lineTo(prevX, prevY);
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
       }
 
-      animationFrameId = requestAnimationFrame(render);
+      if (isVisible && isTabVisible) {
+        animationFrameId = requestAnimationFrame(render);
+      }
     };
-
-    let isVisible = true;
-    let isTabVisible = !document.hidden;
 
     const startLoop = () => {
       if (!animationFrameId && isVisible && isTabVisible) {

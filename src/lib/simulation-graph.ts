@@ -6,6 +6,11 @@
  */
 
 import type { Node, Edge, Event, Decision, ChoiceId, SectorId } from "@/data/scenarios";
+import {
+  classifyTelemetrySample,
+  getInterpolatedHaiTelemetry,
+  type MLThreatClassification,
+} from "@/lib/ml-anomaly-detector";
 
 export type EventStatus =
   "EXECUTED" | "BLOCKED_AIRGAP" | "PREVENTED_UPSTREAM" | "PATCHED" | "PENDING";
@@ -43,6 +48,7 @@ export interface SimulationGraphState {
   dossierId: string;
   narrative: string;
   physicsMul: number;
+  mlClassification: MLThreatClassification;
   physics: {
     speedHz: number;
     bearingC: number;
@@ -56,12 +62,14 @@ export interface SimulationGraphState {
 /**
  * Checks whether targetNodeId is reachable from any currently compromised node
  * in the directed network graph, without traversing through isolated nodes.
+ * Optimized with prebuilt adjacency list caching and O(1) queue indexing.
  */
 export function isNodeReachableFromCompromised(
   targetNodeId: string,
   compromisedNodes: Set<string>,
   edges: readonly Edge[] | Edge[],
   isolatedNodes: Set<string>,
+  prebuiltAdj?: Map<string, string[]>,
 ): boolean {
   // If target itself is isolated, it is not reachable
   if (isolatedNodes.has(targetNodeId)) {
@@ -78,15 +86,28 @@ export function isNodeReachableFromCompromised(
     return true;
   }
 
-  // Build adjacency list excluding edges connected to isolated nodes
-  const adj = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (isolatedNodes.has(edge.from) || isolatedNodes.has(edge.to)) {
-      continue;
+  // Build adjacency list excluding edges connected to isolated nodes (if not prebuilt)
+  let adj = prebuiltAdj;
+  if (!adj) {
+    adj = new Map<string, string[]>();
+    for (const edge of edges) {
+      if (isolatedNodes.has(edge.from) || isolatedNodes.has(edge.to)) {
+        continue;
+      }
+      let listFrom = adj.get(edge.from);
+      if (!listFrom) {
+        listFrom = [];
+        adj.set(edge.from, listFrom);
+      }
+      listFrom.push(edge.to);
+
+      let listTo = adj.get(edge.to);
+      if (!listTo) {
+        listTo = [];
+        adj.set(edge.to, listTo);
+      }
+      listTo.push(edge.from);
     }
-    const list = adj.get(edge.from) || [];
-    list.push(edge.to);
-    adj.set(edge.from, list);
   }
 
   // Multi-source BFS starting from all currently compromised non-isolated nodes
@@ -100,17 +121,21 @@ export function isNodeReachableFromCompromised(
     }
   }
 
-  while (queue.length > 0) {
-    const curr = queue.shift()!;
+  let head = 0;
+  while (head < queue.length) {
+    const curr = queue[head++];
     if (curr === targetNodeId) {
       return true;
     }
 
-    const neighbors = adj.get(curr) || [];
-    for (const neighbor of neighbors) {
-      if (!visited.has(neighbor) && !isolatedNodes.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
+    const neighbors = adj.get(curr);
+    if (neighbors) {
+      for (let i = 0; i < neighbors.length; i++) {
+        const neighbor = neighbors[i];
+        if (!visited.has(neighbor) && !isolatedNodes.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
       }
     }
   }
@@ -160,6 +185,27 @@ export function evaluateSimulationState(params: {
     const c = choices[d.id];
     if (c === "ACT") actCount++;
     else if (c === "DEFER") deferCount++;
+  }
+
+  // Pre-build graph adjacency list once per simulation evaluation
+  const adj = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (isolatedNodes.has(edge.from) || isolatedNodes.has(edge.to)) {
+      continue;
+    }
+    let listFrom = adj.get(edge.from);
+    if (!listFrom) {
+      listFrom = [];
+      adj.set(edge.from, listFrom);
+    }
+    listFrom.push(edge.to);
+
+    let listTo = adj.get(edge.to);
+    if (!listTo) {
+      listTo = [];
+      adj.set(edge.to, listTo);
+    }
+    listTo.push(edge.from);
   }
 
   // Iterate chronologically through all scenario events
@@ -226,6 +272,7 @@ export function evaluateSimulationState(params: {
             compromisedNodes,
             edges,
             isolatedNodes,
+            adj,
           );
 
           if (reachable) {
@@ -424,21 +471,25 @@ export function evaluateSimulationState(params: {
   }
 
   const phase = Math.min(1, t / totalTime);
+  const haiSample = getInterpolatedHaiTelemetry(phase);
 
   // Rotor Frequency (Hz): Nominal 50.0 Hz; Alarm > 52.5 Hz
   const plc3Compromised = compromisedNodes.has("plc-3");
   const speedDrift = plc3Compromised ? phase * 2.8 * physicsMul : phase * 0.1 * physicsMul;
-  const speedHz = 50.0 + Math.sin(t / 40) * 0.15 + speedDrift;
+  // Blend baseline frequency with HAI dataset curve
+  const speedHz = haiSample.frequencyHz - 10.0 + Math.sin(t / 40) * 0.15 + speedDrift;
 
   // Bearing Temperature (°C): Nominal 62.0 °C; Alarm > 95.0 °C
   const centCompromised = compromisedNodes.has("cent") || (plc3Compromised && phase > 0.6);
   const bearingDrift = centCompromised ? phase * 42 * physicsMul : phase * 3 * physicsMul;
-  const bearingC = 62.0 + bearingDrift + Math.sin(t / 12) * 0.8;
+  const bearingC = haiSample.temperatureC + 20.2 + bearingDrift + Math.sin(t / 12) * 0.8;
 
   // Feeder Pressure (bar): Nominal 8.2 bar; Alarm < 7.0 bar
   const brkCompromised = compromisedNodes.has("brk") || compromisedNodes.has("plc-7");
   const pressureDrop = brkCompromised ? phase * 1.8 * physicsMul : phase * 0.05 * physicsMul;
-  const pressure = 8.2 - pressureDrop + Math.sin(t / 18) * 0.04;
+  const pressure = haiSample.pressureBar + 5.72 - pressureDrop + Math.sin(t / 18) * 0.04;
+
+  const chlorinePpm = sector === "water" ? haiSample.chlorinePpm : 2.0;
 
   return {
     t,
@@ -467,6 +518,12 @@ export function evaluateSimulationState(params: {
     dossierId,
     narrative,
     physicsMul,
+    mlClassification: classifyTelemetrySample({
+      frequencyHz: speedHz,
+      pressureBar: pressure,
+      chlorinePpm,
+      temperatureC: bearingC,
+    }),
     physics: {
       speedHz,
       bearingC,

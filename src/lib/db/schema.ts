@@ -11,6 +11,7 @@ export const operators = sqliteTable("operators", {
   clearance: text("clearance").default("TS/SCI · RED LEVEL"),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("operator"), // 'operator' | 'instructor' | 'admin'
+  emailConfirmed: integer("email_confirmed", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -114,6 +115,10 @@ export const simulationScenarios = sqliteTable("simulation_scenarios", {
   nodesJson: text("nodes_json"),
   eventsJson: text("events_json"),
   decisionsJson: text("decisions_json"),
+  redTacticsJson: text("red_tactics_json"),
+  blueMitigationsJson: text("blue_mitigations_json"),
+  caseFileId: text("case_file_id"),
+  researchReferencesJson: text("research_references_json"),
   isPublic: integer("is_public", { mode: "boolean" }).default(false),
   createdAt: text("created_at")
     .notNull()

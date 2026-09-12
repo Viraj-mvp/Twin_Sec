@@ -10,423 +10,377 @@ interface Topology2DProps {
   onSelect: (id: string, source?: "tap" | "long") => void;
   t: number;
   activeNode: string | null;
-  isolatedNodes: Set<string>;
+  isolatedNodes?: Set<string>;
   commandActiveNode?: string | null;
-  nodeOffsets?: Record<string, { dx: number; dy: number }>;
+  commandActiveAction?: string | null;
 }
 
-export const Topology2D: React.FC<Topology2DProps> = ({
-  nodes,
-  edges,
-  compromised,
-  blockedNodes = new Set<string>(),
-  selected,
-  onSelect,
-  t,
-  activeNode,
-  isolatedNodes,
-  commandActiveNode,
-  nodeOffsets = {},
-}) => {
-  const byId = (id: string) => nodes.find((n) => n.id === id);
-  const [pressed, setPressed] = useState<string | null>(null);
-  const longTimer = useRef<number | null>(null);
-  const firedLong = useRef(false);
+export const Topology2D: React.FC<Topology2DProps> = React.memo(
+  ({
+    nodes,
+    edges,
+    compromised,
+    selected,
+    onSelect,
+    t,
+    activeNode,
+    isolatedNodes = new Set<string>(),
+    commandActiveNode,
+  }) => {
+    const byId = (id: string) => nodes.find((n) => n.id === id);
+    const [pressed, setPressed] = useState<string | null>(null);
+    const longTimer = useRef<number | null>(null);
+    const firedLong = useRef(false);
 
-  const onPointerDown = (id: string) => {
-    setPressed(id);
-    firedLong.current = false;
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = window.setTimeout(() => {
-      firedLong.current = true;
-      onSelect(id, "long");
+    const onPointerDown = (id: string) => {
+      setPressed(id);
+      firedLong.current = false;
+      if (longTimer.current) window.clearTimeout(longTimer.current);
+      longTimer.current = window.setTimeout(() => {
+        firedLong.current = true;
+        onSelect(id, "long");
+        setPressed(null);
+      }, 420);
+    };
+
+    const onPointerUp = (id: string) => {
+      if (longTimer.current) window.clearTimeout(longTimer.current);
+      longTimer.current = null;
+      if (!firedLong.current) onSelect(id, "tap");
       setPressed(null);
-    }, 420);
-  };
+    };
 
-  const onPointerUp = (id: string) => {
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = null;
-    if (!firedLong.current) onSelect(id, "tap");
-    setPressed(null);
-  };
+    const onPointerCancel = () => {
+      if (longTimer.current) window.clearTimeout(longTimer.current);
+      longTimer.current = null;
+      setPressed(null);
+    };
 
-  const onPointerCancel = () => {
-    if (longTimer.current) window.clearTimeout(longTimer.current);
-    longTimer.current = null;
-    setPressed(null);
-  };
+    // Responsive, un-stretched 1000 x 500 coordinate mapping
+    const mapX = (x: number) => 70 + (x / 100) * 760;
+    const mapY = (y: number) => 55 + (y / 100) * 380;
 
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="absolute inset-0 h-full w-full touch-manipulation"
-    >
-      <defs>
-        <marker
-          id="arrow-active"
-          viewBox="0 0 10 10"
-          refX="6"
-          refY="5"
-          markerWidth="4"
-          markerHeight="4"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 1 L 10 5 L 0 9 z" fill="#bfff2e" />
-        </marker>
-        <marker
-          id="arrow-nominal"
-          viewBox="0 0 10 10"
-          refX="6"
-          refY="5"
-          markerWidth="3"
-          markerHeight="3"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 1 L 10 5 L 0 9 z" fill="oklch(0.45 0.02 240)" />
-        </marker>
-        <marker
-          id="arrow-severed"
-          viewBox="0 0 10 10"
-          refX="6"
-          refY="5"
-          markerWidth="3"
-          markerHeight="3"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
-        </marker>
-      </defs>
+    return (
+      <svg
+        viewBox="0 0 1000 500"
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-full touch-manipulation select-none"
+      >
+        {/* EDGES / LINKS */}
+        {edges.map((e, i) => {
+          const a = byId(e.from);
+          const b = byId(e.to);
+          if (!a || !b) return null;
 
-      {/* EDGES */}
-      {edges.map((e, i) => {
-        const a = byId(e.from);
-        const b = byId(e.to);
-        if (!a || !b) return null;
+          const ax = mapX(a.x);
+          const ay = mapY(a.y);
+          const bx = mapX(b.x);
+          const by = mapY(b.y);
 
-        const isSevered = isolatedNodes.has(e.from) || isolatedNodes.has(e.to);
-        const live = !isSevered && compromised.has(e.from) && compromised.has(e.to);
-        const activeFrom = !isSevered && compromised.has(e.from);
+          const isIso = isolatedNodes.has(e.from) || isolatedNodes.has(e.to);
+          const isBothCompromised = !isIso && compromised.has(e.from) && compromised.has(e.to);
+          const isPathCompromised = !isIso && (compromised.has(e.from) || compromised.has(e.to));
+          const mx = (ax + bx) / 2;
+          const my = (ay + by) / 2;
 
-        const midX = (a.x + b.x) / 2;
-        const midY = (a.y + b.y) / 2;
-
-        return (
-          <g key={i}>
-            {/* Edge line */}
-            <line
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke={
-                isSevered
-                  ? "#f59e0b"
-                  : live
-                    ? "#bfff2e"
-                    : activeFrom
-                      ? "oklch(0.7 0.2 130)"
-                      : "oklch(0.35 0.01 240)"
-              }
-              strokeWidth={live ? 0.35 : isSevered ? 0.22 : activeFrom ? 0.25 : 0.15}
-              strokeDasharray={isSevered ? "1.2 1.2" : undefined}
-              opacity={isSevered ? 0.55 : 1}
-              markerEnd={
-                isSevered
-                  ? "url(#arrow-severed)"
-                  : live || activeFrom
-                    ? "url(#arrow-active)"
-                    : "url(#arrow-nominal)"
-              }
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {/* Severed Air-Gap Break Marker */}
-            {isSevered && (
-              <g transform={`translate(${midX}, ${midY})`}>
-                <circle
-                  r={1.2}
-                  fill="#0f0f12"
-                  stroke="#f59e0b"
-                  strokeWidth={0.2}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <line
-                  x1={-0.6}
-                  y1={-0.6}
-                  x2={0.6}
-                  y2={0.6}
-                  stroke="#f59e0b"
-                  strokeWidth={0.25}
-                  vectorEffect="non-scaling-stroke"
-                />
-                <line
-                  x1={0.6}
-                  y1={-0.6}
-                  x2={-0.6}
-                  y2={0.6}
-                  stroke="#f59e0b"
-                  strokeWidth={0.25}
-                  vectorEffect="non-scaling-stroke"
-                />
-              </g>
-            )}
-
-            {/* Active Compromise Moving Packet Pulses */}
-            {live && (
+          return (
+            <g key={i}>
+              {/* Baseline link */}
               <line
-                x1={a.x}
-                y1={a.y}
-                x2={b.x}
-                y2={b.y}
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.6}
-                strokeDasharray="0.8 3"
-                strokeDashoffset={-t * 4}
+                x1={ax}
+                y1={ay}
+                x2={bx}
+                y2={by}
+                stroke={
+                  isIso
+                    ? "#00f0ff"
+                    : isBothCompromised
+                      ? "oklch(0.65 0.25 28)"
+                      : isPathCompromised
+                        ? "oklch(0.82 0.2 85)"
+                        : "rgba(255, 255, 255, 0.18)"
+                }
+                strokeWidth={isIso ? 2 : isBothCompromised ? 3 : 1.5}
+                strokeDasharray={isIso ? "5 5" : undefined}
                 vectorEffect="non-scaling-stroke"
-                opacity={0.6}
+                opacity={isIso ? 0.7 : 1}
               />
-            )}
-          </g>
-        );
-      })}
 
-      {/* NODES */}
-      {nodes.map((n) => {
-        const isI = isolatedNodes.has(n.id);
-        const isC = compromised.has(n.id);
-        const isBlocked = blockedNodes.has(n.id) && !isC && !isI;
-        const isS = selected === n.id;
-        const isA = activeNode === n.id;
-        const isP = pressed === n.id;
-        const isCmdActive = commandActiveNode === n.id;
-        const off = nodeOffsets[n.id] || { dx: 0, dy: 0 };
+              {/* Dynamic Particle Telemetry Flow Lines */}
+              {isBothCompromised && (
+                <line
+                  x1={ax}
+                  y1={ay}
+                  x2={bx}
+                  y2={by}
+                  stroke="oklch(0.65 0.25 28)"
+                  strokeWidth={3}
+                  strokeDasharray="8 12"
+                  strokeDashoffset={-t * 16}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.9}
+                />
+              )}
 
-        return (
-          <g
-            key={n.id}
-            className="cursor-pointer select-none focus:outline-none [&:focus-visible>rect.focus-ring]:opacity-100"
-            style={{
-              touchAction: "manipulation",
-              transform: `translate(${off.dx}px, ${off.dy}px)`,
-              transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label={`${n.label} — ${n.kind}. ${
-              isI
-                ? "Air-Gapped / Isolated"
-                : isC
-                  ? "Compromised"
-                  : isBlocked
-                    ? "Protected by Air-Gap"
-                    : "Nominal"
-            }. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
-            aria-pressed={isS}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onPointerDown(n.id);
-            }}
-            onPointerUp={() => onPointerUp(n.id)}
-            onPointerLeave={onPointerCancel}
-            onPointerCancel={onPointerCancel}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
+              {isPathCompromised && !isBothCompromised && (
+                <line
+                  x1={ax}
+                  y1={ay}
+                  x2={bx}
+                  y2={by}
+                  stroke="oklch(0.82 0.2 85)"
+                  strokeWidth={2}
+                  strokeDasharray="6 10"
+                  strokeDashoffset={-t * 10}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.75}
+                />
+              )}
+
+              {!isIso && !isPathCompromised && (
+                <line
+                  x1={ax}
+                  y1={ay}
+                  x2={bx}
+                  y2={by}
+                  stroke="oklch(0.86 0.24 125)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 12"
+                  strokeDashoffset={-t * 4}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.35}
+                />
+              )}
+
+              {/* Air-gap severed crosshatch indicator */}
+              {isIso && (
+                <g transform={`translate(${mx}, ${my})`}>
+                  <rect
+                    x={-9}
+                    y={-7}
+                    width={18}
+                    height={14}
+                    fill="#000000"
+                    stroke="#00f0ff"
+                    strokeWidth={1.5}
+                  />
+                  <text
+                    x={0}
+                    y={3.5}
+                    textAnchor="middle"
+                    fill="#00f0ff"
+                    fontSize={9}
+                    fontWeight="900"
+                    fontFamily="monospace"
+                  >
+                    ✕
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* NODES */}
+        {nodes.map((n) => {
+          const nx = mapX(n.x);
+          const ny = mapY(n.y);
+
+          const isC = compromised.has(n.id);
+          const isIso = isolatedNodes.has(n.id);
+          const isS = selected === n.id;
+          const isA = activeNode === n.id || commandActiveNode === n.id;
+          const isP = pressed === n.id;
+
+          return (
+            <g
+              key={n.id}
+              className="cursor-pointer select-none focus:outline-none [&:focus-visible>rect.focus-ring]:opacity-100"
+              style={{ touchAction: "manipulation" }}
+              role="button"
+              tabIndex={0}
+              aria-label={`${n.label} — ${n.kind}. ${isIso ? "Air-gapped" : isC ? "Compromised" : "Nominal"}. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
+              aria-pressed={isS}
+              onPointerDown={(e) => {
                 e.preventDefault();
-                onSelect(n.id, "tap");
-              }
-            }}
-          >
-            {/* Command execution active target pulse */}
-            {isCmdActive && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={6}
-                fill="none"
-                stroke="#00f0ff"
-                strokeWidth={0.5}
-                vectorEffect="non-scaling-stroke"
-                className="animate-ping"
-              />
-            )}
-
-            {/* Enlarged hit target */}
-            <rect x={n.x - 5} y={n.y - 5} width={10} height={10} fill="transparent" />
-
-            {/* Keyboard focus ring */}
-            <rect
-              className="focus-ring"
-              x={n.x - 3}
-              y={n.y - 3}
-              width={6}
-              height={6}
-              fill="none"
-              stroke="oklch(0.97 0.005 90)"
-              strokeWidth={0.45}
-              strokeDasharray="0.8 0.6"
-              vectorEffect="non-scaling-stroke"
-              opacity={0}
-              style={{ transition: "opacity 120ms" }}
-            />
-
-            {/* Haptic press ripple */}
-            {isP && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={2}
-                fill="none"
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.4}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.9}
-              >
-                <animate attributeName="r" from="1.5" to="7" dur="0.42s" repeatCount="indefinite" />
-                <animate
-                  attributeName="opacity"
-                  from="1"
-                  to="0"
-                  dur="0.42s"
-                  repeatCount="indefinite"
-                />
-              </circle>
-            )}
-
-            {/* Active timeline focus ring */}
-            {isA && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={4.5}
-                fill="none"
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.25}
-                vectorEffect="non-scaling-stroke"
-                opacity={0.9}
-              >
-                <animate attributeName="r" from="2" to="6" dur="1.2s" repeatCount="indefinite" />
-                <animate
-                  attributeName="opacity"
-                  from="0.9"
-                  to="0"
-                  dur="1.2s"
-                  repeatCount="indefinite"
-                />
-              </circle>
-            )}
-
-            {/* Compromised alert ring */}
-            {isC && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={3}
-                fill="none"
-                stroke="oklch(0.86 0.24 125)"
-                strokeWidth={0.2}
-                opacity={0.4}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-
-            {/* Air-gap / Isolated boundary halo */}
-            {isI && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={3.4}
-                fill="none"
-                stroke="#f59e0b"
-                strokeWidth={0.35}
-                strokeDasharray="0.8 0.5"
-                opacity={0.9}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-
-            {/* Blocked / Protected shield halo */}
-            {isBlocked && (
-              <circle
-                cx={n.x}
-                cy={n.y}
-                r={3.2}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth={0.25}
-                opacity={0.7}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-
-            {/* Main Node Rect */}
-            <rect
-              x={n.x - 1.4}
-              y={n.y - 1.4}
-              width={2.8}
-              height={2.8}
-              fill={
-                isI
-                  ? "oklch(0.25 0.08 65)"
-                  : isC
-                    ? "oklch(0.86 0.24 125)"
-                    : isBlocked
-                      ? "oklch(0.25 0.08 210)"
-                      : "oklch(0.14 0.005 240)"
-              }
-              stroke={
-                isS
-                  ? "oklch(0.97 0.005 90)"
-                  : isI
-                    ? "#f59e0b"
-                    : isC
-                      ? "oklch(0.97 0.005 90)"
-                      : isBlocked
-                        ? "#38bdf8"
-                        : "oklch(0.55 0.02 240)"
-              }
-              strokeWidth={isS ? 0.5 : 0.2}
-              vectorEffect="non-scaling-stroke"
-              style={{
-                transition: "transform 120ms",
-                transformOrigin: `${n.x}px ${n.y}px`,
-                transform: isP ? "scale(1.25)" : undefined,
+                onPointerDown(n.id);
               }}
-            />
-          </g>
-        );
-      })}
+              onPointerUp={() => onPointerUp(n.id)}
+              onPointerLeave={onPointerCancel}
+              onPointerCancel={onPointerCancel}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(n.id, "tap");
+                }
+              }}
+            >
+              {/* Safe-area 44px enlarged hit target */}
+              <rect x={nx - 24} y={ny - 24} width={48} height={48} fill="transparent" />
 
-      {/* NODE LABELS */}
-      {nodes.map((n: Node) => {
-        const isI = isolatedNodes.has(n.id);
-        const isC = compromised.has(n.id);
-        const isBlocked = blockedNodes.has(n.id) && !isC && !isI;
-        return (
-          <g key={n.id + "-l"}>
-            <text
-              x={n.x + 2.2}
-              y={n.y - 1.6}
-              fill={isI ? "#f59e0b" : isBlocked ? "#38bdf8" : "oklch(0.97 0.005 90)"}
-              fontSize="1.6"
-              fontFamily="JetBrains Mono, monospace"
-              opacity={selected === n.id || isC || isI ? 1 : 0.65}
-            >
-              {n.label}
-            </text>
-            <text
-              x={n.x + 2.2}
-              y={n.y + 0.4}
-              fill={isI ? "#fbbf24" : isBlocked ? "#7dd3fc" : "oklch(0.65 0.02 240)"}
-              fontSize="1.1"
-              fontFamily="JetBrains Mono, monospace"
-            >
-              {isI ? "AIR-GAPPED" : isBlocked ? "PROTECTED" : n.kind.toUpperCase()}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-};
+              {/* Keyboard focus ring */}
+              <rect
+                className="focus-ring"
+                x={nx - 16}
+                y={ny - 16}
+                width={32}
+                height={32}
+                fill="none"
+                stroke="oklch(0.97 0.005 90)"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                vectorEffect="non-scaling-stroke"
+                opacity={0}
+                style={{ transition: "opacity 120ms" }}
+              />
+
+              {/* Press ripple */}
+              {isP && (
+                <circle
+                  cx={nx}
+                  cy={ny}
+                  r={12}
+                  fill="none"
+                  stroke="oklch(0.97 0.005 90)"
+                  strokeWidth={2}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.9}
+                >
+                  <animate
+                    attributeName="r"
+                    from="10"
+                    to="35"
+                    dur="0.42s"
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="opacity"
+                    from="1"
+                    to="0"
+                    dur="0.42s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              )}
+
+              {/* Active Radar Sweep Ring */}
+              {isA && (
+                <circle
+                  cx={nx}
+                  cy={ny}
+                  r={22}
+                  fill="none"
+                  stroke={isIso ? "oklch(0.82 0.2 85)" : "oklch(0.97 0.005 90)"}
+                  strokeWidth={1.75}
+                  vectorEffect="non-scaling-stroke"
+                  opacity={0.9}
+                >
+                  <animate
+                    attributeName="r"
+                    from="12"
+                    to="36"
+                    dur="1.3s"
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="opacity"
+                    from="0.9"
+                    to="0"
+                    dur="1.3s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              )}
+
+              {/* Compromised halo circle */}
+              {isC && !isIso && (
+                <circle
+                  cx={nx}
+                  cy={ny}
+                  r={18}
+                  fill="none"
+                  stroke="oklch(0.86 0.24 125)"
+                  strokeWidth={1.5}
+                  opacity={0.45}
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+
+              {/* Solid Node Square (Perfect Square, No Distortion) */}
+              <rect
+                x={nx - 10}
+                y={ny - 10}
+                width={20}
+                height={20}
+                fill={
+                  isIso
+                    ? "oklch(0.82 0.2 85)"
+                    : isC
+                      ? "oklch(0.86 0.24 125)"
+                      : "oklch(0.14 0.005 240)"
+                }
+                stroke={
+                  isS
+                    ? "oklch(0.97 0.005 90)"
+                    : isIso
+                      ? "oklch(0.82 0.2 85)"
+                      : isC
+                        ? "oklch(0.97 0.005 90)"
+                        : "oklch(0.55 0.02 240)"
+                }
+                strokeWidth={isS ? 2.5 : 1.5}
+                vectorEffect="non-scaling-stroke"
+                style={{
+                  transition: "transform 120ms",
+                  transformOrigin: `${nx}px ${ny}px`,
+                  transform: isP ? "scale(1.25)" : undefined,
+                }}
+              />
+            </g>
+          );
+        })}
+
+        {/* LABELS & METADATA */}
+        {nodes.map((n) => {
+          const nx = mapX(n.x);
+          const ny = mapY(n.y);
+          const isC = compromised.has(n.id);
+          const isIso = isolatedNodes.has(n.id);
+          const isS = selected === n.id;
+
+          // For the rightmost nodes (e.g. ring 5, x >= 90), render label with clean positioning
+          const isRightEdge = n.x >= 85;
+
+          return (
+            <g key={n.id + "-l"} className="pointer-events-none select-none">
+              {/* Primary Label */}
+              <text
+                x={isRightEdge ? nx + 14 : nx + 15}
+                y={ny - 2}
+                fill="oklch(0.97 0.005 90)"
+                fontSize="12.5"
+                fontWeight="bold"
+                fontFamily="JetBrains Mono, monospace"
+                opacity={isS || isC || isIso ? 1 : 0.85}
+              >
+                {n.label}
+              </text>
+              {/* Subtitle / Kind */}
+              <text
+                x={isRightEdge ? nx + 14 : nx + 15}
+                y={ny + 12}
+                fill="oklch(0.65 0.02 240)"
+                fontSize="9"
+                fontWeight="600"
+                fontFamily="JetBrains Mono, monospace"
+                letterSpacing="0.05em"
+              >
+                {n.kind.toUpperCase()}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  },
+);

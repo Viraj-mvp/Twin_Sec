@@ -6,12 +6,10 @@ import breaker from "@/assets/breaker.jpg";
 import mindhunterImg from "@/assets/mindhunter.png";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { useSplitCharReveal, useScrambleReveal, useWordReveal } from "@/hooks/use-text-anim";
-import { useOperatorSession } from "@/lib/auth-store";
-import { useOperator } from "@/contexts/OperatorContext";
-import { logoutOperator } from "@/lib/api/auth.functions";
 import { Footer } from "../components/Footer";
 import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
 import { pushNavSection } from "@/lib/nav-stack";
+import { TwinSecMatrixCanvas } from "@/components/TwinSecMatrixCanvas";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -88,16 +86,24 @@ function Hero() {
           <span className="text-foreground/90 font-medium">17 JUN 2026 · 04:17 UTC</span>
         </div>
 
-        <h1
-          ref={heroRef}
-          className="display text-[18vw] md:text-[14vw] lg:text-[200px] leading-[0.82] overflow-hidden"
-        >
-          ATTACKS
-          <br />
-          DON&apos;T STAY
-          <br />
-          <span className="text-accent">DIGITAL.</span>
-        </h1>
+        <div className="grid grid-cols-12 gap-8 items-center">
+          <div className="col-span-12 lg:col-span-7">
+            <h1
+              ref={heroRef}
+              className="display text-[16vw] md:text-[12vw] lg:text-[135px] xl:text-[160px] leading-[0.82] overflow-hidden"
+            >
+              ATTACKS
+              <br />
+              DON&apos;T STAY
+              <br />
+              <span className="text-accent">DIGITAL.</span>
+            </h1>
+          </div>
+
+          <div className="col-span-12 lg:col-span-5 flex justify-center lg:justify-end">
+            <TwinSecMatrixCanvas />
+          </div>
+        </div>
 
         <div
           className="mt-16 grid grid-cols-12 gap-6 animate-reveal"

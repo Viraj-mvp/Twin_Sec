@@ -51,3 +51,7 @@ implementation_plan*
 digital-twin-security-reference.md
 docs/
 diagrams/
+scripts/generate_report.py
+PROJECT_CONTEXT.md
+TwinSec_Final_Project_Report.docx
+TwinSec_Final_Project_Report.md

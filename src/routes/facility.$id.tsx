@@ -1272,8 +1272,8 @@ function WorldTopology({
               y1={pa.y}
               x2={pb.x}
               y2={pb.y}
-              stroke={live ? "oklch(0.86 0.24 125)" : "oklch(0.35 0.01 240)"}
-              strokeWidth={live ? 0.3 : 0.15}
+              stroke={live ? "#FF007F" : "#475569"}
+              strokeWidth={live ? 2.5 : 2}
               vectorEffect="non-scaling-stroke"
             />
             {live && (
@@ -1282,17 +1282,17 @@ function WorldTopology({
                 y1={pa.y}
                 x2={pb.x}
                 y2={pb.y}
-                stroke="oklch(0.97 0.005 90)"
-                strokeWidth={0.5}
-                strokeDasharray="0.8 3"
+                stroke="#FFFFFF"
+                strokeWidth={2}
+                strokeDasharray="4 6"
                 vectorEffect="non-scaling-stroke"
-                opacity={0.6}
+                opacity={0.8}
               >
                 <animate
                   attributeName="stroke-dashoffset"
                   from="0"
-                  to="-30"
-                  dur="2.4s"
+                  to="-20"
+                  dur="1.8s"
                   repeatCount="indefinite"
                 />
               </line>

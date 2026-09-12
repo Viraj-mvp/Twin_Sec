@@ -180,19 +180,6 @@ export const CodeRainCanvas: React.FC<CodeRainCanvasProps> = ({ className = "" }
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
 
-      // 6. Post-processing Layer: Animated Film Grain Noise (40% intensity)
-      const grainImgData = ctx.getImageData(0, 0, width, height);
-      const data = grainImgData.data;
-      const grainAmount = 18; // Noise amplitude
-
-      for (let i = 0; i < data.length; i += 16) {
-        const noise = (Math.random() - 0.5) * grainAmount;
-        data[i] = Math.min(255, Math.max(0, data[i] + noise));
-        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
-        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
-      }
-      ctx.putImageData(grainImgData, 0, 0);
-
       animationFrameId = requestAnimationFrame(render);
     };
 

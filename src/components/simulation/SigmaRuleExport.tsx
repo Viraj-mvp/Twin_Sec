@@ -51,10 +51,10 @@ export const SigmaRuleExport: React.FC<SigmaRuleExportProps> = ({ sector, unmiti
   };
 
   return (
-    <div className="p-4 border-2 border-rule/80 bg-black/95 font-mono text-xs space-y-3 shadow-comic-dark rounded-lg">
+    <div className="p-4 border-2 border-black bg-[#09090B] font-mono text-xs space-y-3 shadow-[4px_4px_0px_0px_#000000]">
       <div className="flex items-center justify-between border-b border-rule pb-2">
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-accent animate-pulse" />
+          <span className="size-2 bg-accent inline-block" />
           <span className="font-bold text-accent text-xs tracking-wider">
             // AUTOMATED SIGMA RULE GENERATOR ({unmitigatedEvents.length} DETECTED)
           </span>

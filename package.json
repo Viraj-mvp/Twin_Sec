@@ -1,5 +1,8 @@
 {
-  "name": "tanstack_start_ts",
+  "$schema": "https://json.schemastore.org/package",
+  "name": "twinsec",
+  "version": "2.4.0",
+  "description": "TwinSec Industrial Cyber Range & Digital Twin Security Simulator",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -11,7 +14,10 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "health": "node scripts/health-check.js",
-    "test": "node scripts/health-check.js",
+    "verify-apis": "node scripts/verify-api-health.js",
+    "test": "node scripts/health-check.js && npx tsx scripts/test-sector-topology.js",
+    "test:e2e": "node scripts/run-e2e-tests.js",
+    "test:topology": "npx tsx scripts/test-sector-topology.js",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"
   },

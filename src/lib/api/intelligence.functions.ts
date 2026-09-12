@@ -170,3 +170,105 @@ Return strict JSON without markdown formatting.`,
       savedToDb: saveToDb,
     };
   });
+
+const ConvertIntelInput = z.object({
+  caseFileId: z.string().min(1),
+  title: z.string().min(1),
+  incidentSummary: z.string().min(1),
+  sector: z.string().default("power"),
+  threatActor: z.string().optional(),
+});
+
+export const convertCaseFileToScenario = createServerFn({ method: "POST" })
+  .validator(ConvertIntelInput)
+  .handler(async ({ data }) => {
+    const token = getSessionCookie();
+    const operator = await getSessionOperator(token);
+    const { caseFileId, title, incidentSummary, sector, threatActor } = data;
+
+    const { convertIntelToScenario } = await import("../scenario-generator.server");
+    const generated = await convertIntelToScenario({
+      caseFileId,
+      title,
+      incidentSummary,
+      sector,
+      threatActor,
+    });
+
+    const scenarioId = `intel-${caseFileId}`;
+    const existing = await db.query.simulationScenarios.findFirst({
+      where: (s, { eq }) => eq(s.id, scenarioId),
+    });
+
+    if (!existing) {
+      await db.insert(simulationScenarios).values({
+        id: scenarioId,
+        createdBy: operator?.id || null,
+        sector: generated.sector,
+        name: generated.name,
+        description: generated.description,
+        attackType: generated.attackType,
+        adversaryProfile: generated.adversaryProfile,
+        caseFileId,
+        redTacticsJson: JSON.stringify(generated.redTactics),
+        blueMitigationsJson: JSON.stringify(generated.blueMitigations),
+        isPublic: true,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return {
+      success: true,
+      scenarioId,
+      sector: generated.sector,
+      name: generated.name,
+      redTactics: generated.redTactics,
+      blueMitigations: generated.blueMitigations,
+    };
+  });
+
+export const getScenarioWithRedBlueBriefing = createServerFn({ method: "GET" })
+  .validator(z.object({ scenarioId: z.string() }))
+  .handler(async ({ data }) => {
+    const sc = await db.query.simulationScenarios.findFirst({
+      where: (s, { eq }) => eq(s.id, data.scenarioId),
+    });
+
+    if (!sc) {
+      return {
+        found: false,
+        redTactics: [
+          "nmap -sS -p 104,502 10.0.0.0/24 (Recon Substation & SCADA Bus)",
+          "modbus-cli write --target plc-01 --val 1 (Execute Setpoint Override)",
+        ],
+        blueMitigations: [
+          "isolate-node plc-01 (Isolate Compromised Controller)",
+          "block-ip 10.0.0.45 (Block Adversary C2 IP)",
+        ],
+      };
+    }
+
+    let redTactics: string[] = [];
+    let blueMitigations: string[] = [];
+    try {
+      if (sc.redTacticsJson) redTactics = JSON.parse(sc.redTacticsJson);
+      if (sc.blueMitigationsJson) blueMitigations = JSON.parse(sc.blueMitigationsJson);
+    } catch {
+      // JSON parse fallback
+    }
+
+    return {
+      found: true,
+      scenario: {
+        id: sc.id,
+        name: sc.name,
+        sector: sc.sector,
+        description: sc.description,
+        attackType: sc.attackType,
+        adversaryProfile: sc.adversaryProfile,
+        caseFileId: sc.caseFileId,
+      },
+      redTactics,
+      blueMitigations,
+    };
+  });

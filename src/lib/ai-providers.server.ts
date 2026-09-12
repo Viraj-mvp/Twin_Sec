@@ -57,7 +57,7 @@ export function getProviderForTask(task: AITask) {
     return {
       provider: createOpenAICompatible({
         name: "groq",
-        baseURL: "https://api.groq.com/openai/v1",
+        baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
         headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
       }),
       model: "llama-3.3-70b-versatile",
@@ -73,7 +73,9 @@ export function getProviderForTask(task: AITask) {
         return {
           provider: createOpenAICompatible({
             name: "google",
-            baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+            baseURL:
+              process.env.GEMINI_BASE_URL ||
+              "https://generativelanguage.googleapis.com/v1beta/openai",
             headers: { Authorization: `Bearer ${process.env.GEMINI_API_KEY}` },
           }),
           model: "gemini-2.0-flash",
@@ -88,21 +90,17 @@ export function getProviderForTask(task: AITask) {
 
 export function getFallbackProvider() {
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const baseURL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
   if (!apiKey) {
-    return {
-      provider: createOpenAICompatible({
-        name: "openrouter",
-        baseURL: "https://openrouter.ai/api/v1",
-        headers: { Authorization: "Bearer unconfigured" },
-      }),
-      model: "meta-llama/llama-3.1-8b-instruct",
-      maxTokens: 1000,
-    };
+    throw new AIUnavailableError(
+      "openrouter_fallback",
+      new Error("OPENROUTER_API_KEY is not configured"),
+    );
   }
   return {
     provider: createOpenAICompatible({
       name: "openrouter",
-      baseURL: "https://openrouter.ai/api/v1",
+      baseURL,
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "HTTP-Referer": "https://twinsec.io",

@@ -13,7 +13,7 @@ import {
   FolderLock,
 } from "lucide-react";
 import { loginOperator } from "@/lib/api/auth.functions";
-import { saveLocalSession, useOperatorSession } from "@/lib/auth-store";
+import { saveLocalSession } from "@/lib/auth-store";
 import { useOperator } from "@/contexts/OperatorContext";
 import { TwinSecLogo } from "@/components/TwinSecLogo";
 import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
@@ -21,12 +21,15 @@ import { CyberRadarCanvas } from "@/components/CyberRadarCanvas";
 import { log } from "@/lib/logger";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): { from?: string; mode?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { from?: string; mode?: string; reason?: string } => ({
     from: typeof search.from === "string" ? search.from : undefined,
     mode:
       typeof search.mode === "string" && (search.mode === "signup" || search.mode === "register")
         ? "signup"
         : undefined,
+    reason: typeof search.reason === "string" ? search.reason : undefined,
   }),
   head: () => ({
     meta: [
@@ -44,12 +47,15 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const searchParams = useSearch({ from: "/login" });
-  const { from } = searchParams;
-  const { session, loading: sessionLoading } = useOperatorSession();
-  const { operator, loading: operatorLoading, refresh } = useOperator();
+  const { from, reason } = searchParams;
+  const { operator, loading, refresh } = useOperator();
 
-  const loading = sessionLoading || operatorLoading;
-  const activeSession = operator?.loggedIn ? operator : session;
+  const activeSession = operator ?? {
+    callsign: "GUEST OPERATOR",
+    badgeId: "OP-0000",
+    clearance: "UNCLASSIFIED",
+    loggedIn: false,
+  };
 
   const [isRegister, setIsRegister] = useState(searchParams.mode === "signup");
 
@@ -63,6 +69,16 @@ function LoginPage() {
   const [capsLockActive, setCapsLockActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+
+  // Handle URL reason parameter or expired session state
+  useEffect(() => {
+    if (
+      reason === "expired" ||
+      (operator as unknown as { sessionExpired?: boolean })?.sessionExpired
+    ) {
+      setErrorMsg("Your security session has expired due to inactivity. Please sign in again.");
+    }
+  }, [reason, operator]);
 
   // Redirect ONLY when loading is finished AND session is authenticated.
   useEffect(() => {

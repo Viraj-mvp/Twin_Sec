@@ -32,6 +32,7 @@ sqlite.exec(`
     clearance TEXT DEFAULT 'TS/SCI · RED LEVEL',
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'operator',
+    email_confirmed INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
   );
 
@@ -84,12 +85,12 @@ sqlite.exec(`
     description TEXT NOT NULL,
     attack_type TEXT NOT NULL,
     adversary_profile TEXT NOT NULL,
-    initial_nodes TEXT,
-    events TEXT,
-    decisions TEXT,
-    nodes_json TEXT,
-    events_json TEXT,
-    decisions_json TEXT,
+    initial_nodes TEXT DEFAULT '[]',
+    events TEXT DEFAULT '[]',
+    decisions TEXT DEFAULT '[]',
+    nodes_json TEXT DEFAULT '[]',
+    events_json TEXT DEFAULT '[]',
+    decisions_json TEXT DEFAULT '[]',
     is_public INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -123,9 +124,22 @@ const autoMigrateTable = (tableName: string, columns: { name: string; type: stri
 autoMigrateTable("operators", [
   { name: "email", type: "TEXT" },
   { name: "role", type: "TEXT NOT NULL DEFAULT 'operator'" },
+  { name: "email_confirmed", type: "INTEGER NOT NULL DEFAULT 1" },
 ]);
 
-autoMigrateTable("simulation_scenarios", [{ name: "is_public", type: "INTEGER DEFAULT 0" }]);
+autoMigrateTable("simulation_scenarios", [
+  { name: "is_public", type: "INTEGER DEFAULT 0" },
+  { name: "red_tactics_json", type: "TEXT" },
+  { name: "blue_mitigations_json", type: "TEXT" },
+  { name: "case_file_id", type: "TEXT" },
+  { name: "research_references_json", type: "TEXT" },
+  { name: "initial_nodes", type: "TEXT DEFAULT '[]'" },
+  { name: "events", type: "TEXT DEFAULT '[]'" },
+  { name: "decisions", type: "TEXT DEFAULT '[]'" },
+  { name: "events_json", type: "TEXT DEFAULT '[]'" },
+  { name: "decisions_json", type: "TEXT DEFAULT '[]'" },
+  { name: "nodes_json", type: "TEXT DEFAULT '[]'" },
+]);
 
 // Migrate audit_logs table if training_run_id has NOT NULL constraint from legacy schema
 try {
@@ -135,6 +149,7 @@ try {
   }>;
   const trCol = auditLogCols.find((c) => c.name === "training_run_id");
   if (trCol && trCol.notnull === 1) {
+    sqlite.exec("PRAGMA foreign_keys = OFF;");
     sqlite.exec(`
       CREATE TABLE audit_logs_new (
         id TEXT PRIMARY KEY,
@@ -149,51 +164,19 @@ try {
       DROP TABLE audit_logs;
       ALTER TABLE audit_logs_new RENAME TO audit_logs;
     `);
+    sqlite.exec("PRAGMA foreign_keys = ON;");
   }
-} catch (err) {
-  console.warn("Audit logs migration skipped:", err);
+} catch (e) {
+  console.warn("Audit logs migration skipped:", e);
 }
-
-try {
-  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_operators_email ON operators(email);");
-} catch {
-  // Index already exists
-}
-
-// Indexes on foreign-key lookup columns so "my runs", "my sessions" and
-// audit-log queries don't full-scan as the tables grow. Safe to re-run on
-// existing databases (IF NOT EXISTS) and cheap on first boot.
-const CREATE_INDEX_SQL = [
-  "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);",
-  "CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);",
-  "CREATE INDEX IF NOT EXISTS idx_sessions_operator_id ON sessions(operator_id);",
-  "CREATE INDEX IF NOT EXISTS idx_training_runs_operator_id ON training_runs(operator_id);",
-  "CREATE INDEX IF NOT EXISTS idx_audit_logs_operator_id ON audit_logs(operator_id);",
-  "CREATE INDEX IF NOT EXISTS idx_audit_logs_training_run_id ON audit_logs(training_run_id);",
-];
-for (const sql of CREATE_INDEX_SQL) {
-  try {
-    sqlite.exec(sql);
-  } catch {
-    // Index already exists or column missing — non-fatal.
-  }
-}
-
-autoMigrateTable("sessions", [
-  { name: "created_at", type: "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP" },
-]);
-
-autoMigrateTable("training_runs", [
-  { name: "hint_count", type: "INTEGER NOT NULL DEFAULT 0" },
-  { name: "completed_at", type: "TEXT" },
-]);
 
 autoMigrateTable("audit_logs", [
+  { name: "training_run_id", type: "TEXT REFERENCES training_runs(id) ON DELETE CASCADE" },
   { name: "operator_id", type: "TEXT REFERENCES operators(id) ON DELETE SET NULL" },
   { name: "severity", type: "TEXT NOT NULL DEFAULT 'info'" },
 ]);
 
-// Seed default cyber-physical attack scenarios (including HOLLOW) into database
+// Seed default cyber-physical attack scenarios into database
 try {
   const seedScenarios = [
     {
@@ -204,8 +187,27 @@ try {
         "Targeted OT malware (ELECTRUM / Sandworm) exploiting IEC 60870-5-104 & IEC 61850 substation protocols. Silently overwrites PLC-7 ladder logic, walking frequency setpoints while disarming SIS safety interlocks to trip 14MW circuit breakers and trigger cascading power blackout.",
       attack_type: "disruption",
       adversary_profile: "Sandworm / ELECTRUM (APT44)",
+      case_file_id: "ukraine-grid",
+      red_tactics_json: JSON.stringify([
+        "nmap -sS -p 104,2404 10.0.4.0/24 (Scan IEC-104 Substation Bus)",
+        "modbus-cli read plc-7 40001 (Read Frequency Setpoint)",
+        "iec104-inject --target plc-7 --cmd SET_FREQ --val 65.4 (Overdrive Rotor Frequency)",
+        "exploit-plc --target sis-ls --payload OVERRIDE_TRIP (Disable SIL-3 Safety Interlocks)",
+      ]),
+      blue_mitigations_json: JSON.stringify([
+        "isolate-node plc-7 (Disconnect Compromised Substation PLC)",
+        "block-ip 10.0.0.45 (Sever Rogue EWS-04 VPN Tunnel)",
+        "restore-logic plc-7 (Flash Clean IEC-61850 Firmware Image)",
+        "patch-cve CVE-2022-3165 (Apply SIL-3 Interlock Protection Patch)",
+      ]),
       is_public: 1,
       created_at: new Date().toISOString(),
+      initial_nodes: "[]",
+      events: "[]",
+      decisions: "[]",
+      events_json: "[]",
+      decisions_json: "[]",
+      nodes_json: "[]",
     },
     {
       id: "operation-waterfall",
@@ -215,8 +217,25 @@ try {
         "Volt Typhoon stealth intrusion exploiting contractor VPN credentials. Replays SCADA historian trends to mask a 6x chlorine dosing walk toward municipal reservoir distribution.",
       attack_type: "sabotage",
       adversary_profile: "Volt Typhoon / Industrial Sabre",
+      case_file_id: "oldsmar-water",
+      red_tactics_json: JSON.stringify([
+        "nmap -sV -p 502 10.0.2.0/24 (Scan Modbus Dosing PLCs)",
+        "replay-telemetry --target historian --mask NORMAL (Spoof SCADA Telemetry)",
+        "modbus-write --target plc-cl2 --reg 3004 --val 600 (Walk Chlorine Dosing to 6x)",
+      ]),
+      blue_mitigations_json: JSON.stringify([
+        "isolate-node plc-cl2 (Emergency Shutoff Chemical Feed Valve)",
+        "block-ip 192.168.10.4 (Revoke Stolen VPN Session)",
+        "restore-logic plc-cl2 (Reset Dosing Rate to Safe 1.5 PPM Standard)",
+      ]),
       is_public: 1,
       created_at: new Date().toISOString(),
+      initial_nodes: "[]",
+      events: "[]",
+      decisions: "[]",
+      events_json: "[]",
+      decisions_json: "[]",
+      nodes_json: "[]",
     },
     {
       id: "centrifuge-drift",
@@ -226,8 +245,25 @@ try {
         "Stuxnet-derivative logic modification targeting Siemens S7 controllers. Drives high-speed centrifuges into destructive mechanical resonance band without triggering SCADA alarms.",
       attack_type: "sabotage",
       adversary_profile: "Equation Group / Olympic Games",
+      case_file_id: "stuxnet",
+      red_tactics_json: JSON.stringify([
+        "usb-inject --payload stuxnet.s7p (Infect Engineering Workstation)",
+        "s7-rootkit --target s7-315 --override DB80 (Inject Frequency Ramp Logic)",
+        "replay-telemetry --duration 21s (Freeze SCADA Historian Telemetry)",
+      ]),
+      blue_mitigations_json: JSON.stringify([
+        "isolate-node s7-315 (Disconnect Centrifuge Frequency Drive)",
+        "verify-code-signature --target s7-315 (Purge Unsigned PLC Blocks)",
+        "restore-logic s7-315 (Flash Factory Firmware Baseline)",
+      ]),
       is_public: 1,
       created_at: new Date().toISOString(),
+      initial_nodes: "[]",
+      events: "[]",
+      decisions: "[]",
+      events_json: "[]",
+      decisions_json: "[]",
+      nodes_json: "[]",
     },
     {
       id: "blackout-pipeline",
@@ -237,8 +273,25 @@ try {
         "Creep attack on compressor discharge pressure. Throttles flare relief paths while bypassing SIL-3 safety instrumented systems.",
       attack_type: "disruption",
       adversary_profile: "DarkSide / Industrial Sabre",
+      case_file_id: "triton",
+      red_tactics_json: JSON.stringify([
+        "dnp3-scan --target compressor-01 (Identify Outstation Registers)",
+        "triton-inject --target triconex-sis --memory 0x4000 (Disarm Safety Emergency Trip)",
+        "modbus-write --target valve-rel-01 --val 0 (Close Flare Relief Path)",
+      ]),
+      blue_mitigations_json: JSON.stringify([
+        "isolate-node triconex-sis (Trigger Manual Mechanical Safety Trip)",
+        "block-ip 172.16.4.20 (Terminate Remote IT-OT Gateway Proxy)",
+        "patch-cve CVE-2018-8840 (Remediate Triconex Key Switch Bypass)",
+      ]),
       is_public: 1,
       created_at: new Date().toISOString(),
+      initial_nodes: "[]",
+      events: "[]",
+      decisions: "[]",
+      events_json: "[]",
+      decisions_json: "[]",
+      nodes_json: "[]",
     },
   ];
 
@@ -246,8 +299,16 @@ try {
     "SELECT COUNT(*) as count FROM simulation_scenarios WHERE id = ?",
   );
   const insertStmt = sqlite.prepare(`
-    INSERT INTO simulation_scenarios (id, sector, name, description, attack_type, adversary_profile, is_public, created_at)
-    VALUES (@id, @sector, @name, @description, @attack_type, @adversary_profile, @is_public, @created_at)
+    INSERT INTO simulation_scenarios (
+      id, sector, name, description, attack_type, adversary_profile, case_file_id,
+      red_tactics_json, blue_mitigations_json, is_public, created_at,
+      initial_nodes, events, decisions, events_json, decisions_json, nodes_json
+    )
+    VALUES (
+      @id, @sector, @name, @description, @attack_type, @adversary_profile, @case_file_id,
+      @red_tactics_json, @blue_mitigations_json, @is_public, @created_at,
+      @initial_nodes, @events, @decisions, @events_json, @decisions_json, @nodes_json
+    )
   `);
 
   for (const s of seedScenarios) {

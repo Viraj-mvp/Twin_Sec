@@ -36,6 +36,13 @@
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
+  --color-neo-teal: #00c2cb;
+  --color-neo-magenta: #ff007f;
+  --color-neo-yellow: #ffd700;
+  --color-neo-beige: #f5f5dc;
+  --color-neo-black: #000000;
+  --color-neo-white: #ffffff;
+
   --radius-sm: 0px;
   --radius-md: 0px;
   --radius-lg: 0px;
@@ -72,6 +79,13 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
   html,
   body {
@@ -79,6 +93,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden !important;
+    max-width: 100vw;
   }
   ::selection {
     background: var(--color-accent);
@@ -250,6 +266,42 @@
   color: #f5f3e7;
   border: 2px solid #000000;
   box-shadow: 3px 3px 0px 0px #000000;
+}
+
+/* Neo-Brutalist Official Design System Elevation Tokens */
+@utility shadow-neo-0 {
+  box-shadow: none;
+}
+@utility shadow-neo-1 {
+  box-shadow: 4px 4px 0 0 #000000;
+  border: 2px solid #000000;
+}
+@utility shadow-neo-2 {
+  box-shadow: 12px 12px 0 0 #000000;
+  border: 3px solid #000000;
+}
+@utility shadow-neo-teal {
+  box-shadow: 4px 4px 0 0 #00c2cb;
+  border: 2px solid #000000;
+}
+@utility shadow-neo-magenta {
+  box-shadow: 4px 4px 0 0 #ff007f;
+  border: 2px solid #000000;
+}
+@utility shadow-neo-yellow {
+  box-shadow: 4px 4px 0 0 #ffd700;
+  border: 2px solid #000000;
+}
+
+/* Neo-Brutalist Tactile Push Utilities */
+.btn-neo-push {
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease;
+}
+.btn-neo-push:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px 0px #000000 !important;
 }
 
 /* Focus ring for SVG topology nodes */

@@ -84,6 +84,7 @@ export const registerOperator = createServerFn({ method: "POST" })
       clearance,
       passwordHash,
       role: "operator",
+      emailConfirmed: true,
       createdAt: new Date().toISOString(),
     });
 
@@ -150,7 +151,9 @@ export const loginOperator = createServerFn({ method: "POST" })
     }
 
     if (!operator) {
-      throw new Error("Invalid email or password.");
+      throw new Error(
+        "Invalid email/callsign or password. Please check your credentials and try again.",
+      );
     }
 
     const valid = await verifyPassword(data.password, operator.passwordHash);
@@ -169,7 +172,29 @@ export const loginOperator = createServerFn({ method: "POST" })
       } catch (err) {
         // Audit log error non-fatal
       }
-      throw new Error("Invalid email or password.");
+      throw new Error(
+        "Invalid email/callsign or password. Please check your credentials and try again.",
+      );
+    }
+
+    // Check email confirmation status (checked AFTER password verification to prevent enumeration)
+    if (operator.emailConfirmed === false) {
+      try {
+        await db.insert(auditLogs).values({
+          id: crypto.randomUUID(),
+          trainingRunId: null,
+          operatorId: operator.id,
+          timestamp: new Date().toISOString(),
+          eventType: "auth_unconfirmed",
+          severity: "warn",
+          details: JSON.stringify({ callsign: operator.callsign, reason: "unconfirmed_email" }),
+        });
+      } catch (err) {
+        // Audit log non-fatal
+      }
+      throw new Error(
+        "Email address has not been confirmed. Please verify your email before logging in or contact administrator.",
+      );
     }
 
     // Create session token and set cookie
@@ -209,6 +234,19 @@ export const getOperatorSession = createServerFn({ method: "GET" }).handler(asyn
   const operator = await getSessionOperator(token);
 
   if (!operator) {
+    if (token) {
+      deleteSessionCookie();
+      return {
+        id: undefined,
+        callsign: "GUEST OPERATOR",
+        badgeId: "OP-0000",
+        clearance: "UNCLASSIFIED",
+        role: "guest",
+        loggedIn: false,
+        sessionExpired: true,
+        reason: "Your security session has expired due to inactivity. Please sign in again.",
+      };
+    }
     return {
       id: undefined,
       callsign: "GUEST OPERATOR",
@@ -216,6 +254,7 @@ export const getOperatorSession = createServerFn({ method: "GET" }).handler(asyn
       clearance: "UNCLASSIFIED",
       role: "guest",
       loggedIn: false,
+      sessionExpired: false,
     };
   }
 
@@ -226,6 +265,7 @@ export const getOperatorSession = createServerFn({ method: "GET" }).handler(asyn
     clearance: operator.clearance || "TS/SCI · RED LEVEL",
     role: operator.role,
     loggedIn: true,
+    sessionExpired: false,
   };
 });
 

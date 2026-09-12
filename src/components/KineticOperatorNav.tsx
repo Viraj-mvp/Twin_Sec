@@ -24,7 +24,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { CyberMatrixTrigger } from "./CyberMatrixTrigger";
-import { useOperatorSession, saveLocalSession } from "@/lib/auth-store";
+import { saveLocalSession } from "@/lib/auth-store";
 import { useOperator } from "@/contexts/OperatorContext";
 import { loginOperator, registerOperator } from "@/lib/api/auth.functions";
 import { log } from "@/lib/logger";
@@ -40,11 +40,15 @@ function initials(name: string): string {
 export function KineticOperatorNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { session, loading: sessionLoading } = useOperatorSession();
-  const { operator, loading: operatorLoading, logout } = useOperator();
+  const { operator, logout, refresh } = useOperator();
 
-  const activeSession = operator?.loggedIn ? operator : session;
-  const loggedIn = activeSession.loggedIn;
+  const loggedIn = Boolean(operator?.loggedIn);
+  const activeSession = operator ?? {
+    callsign: "GUEST OPERATOR",
+    badgeId: "OP-0000",
+    clearance: "UNCLASSIFIED",
+    loggedIn: false,
+  };
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
@@ -267,7 +271,7 @@ export function KineticOperatorNav() {
       label: "HOME DECK",
       sub: "ATTACK SURFACE & FIELD MANUAL",
       to: "/",
-      icon: Activity,
+      icon: Shield,
     },
     {
       hotkey: "2",
