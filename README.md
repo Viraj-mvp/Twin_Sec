@@ -1,7 +1,7 @@
 <h1 align="center"><b>TwinSec</b></h1>
 
 <p align="center">
-  <img src="src/assets/twinsec_banner.png" alt="TwinSec Banner" width="100%">
+  <img src="src/assets/cyber_twin_login_bg.png" alt="TwinSec Banner" width="100%">
 </p>
 
 <p align="center">
