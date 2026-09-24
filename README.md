@@ -286,5 +286,9 @@ npm run build
 ---
 
 <div align="center">
+  <a href="https://github.com/viraj-mvp">
+    <img src="https://img.shields.io/badge/ENGINEERED%20BY-VIRAJ-BFFF2E?style=for-the-badge&logo=target&logoColor=000000&labelColor=161b22" alt="Made by Viraj" />
+  </a>
+  <br/>
   <sub>TwinSec Cyber-Physical Range · Built for ICS/OT Security Research · Systematic Industrial Neo-Brutalism</sub>
 </div>
