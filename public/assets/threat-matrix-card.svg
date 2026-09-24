@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%" height="100%">
+  <defs>
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      @keyframes needle-wobble {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(3deg); }
+      }
+      .font-sans {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      }
+      .font-mono {
+        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .gauge-pulse {
+        animation: pulse 1.6s infinite ease-in-out;
+      }
+    </style>
+  </defs>
+
+  <!-- Card Chassis -->
+  <rect width="880" height="300" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5" />
+
+  <!-- Header Strip -->
+  <path d="M 0 6 A 6 6 0 0 1 6 0 L 874 0 A 6 6 0 0 1 880 6 L 880 38 L 0 38 Z" fill="#161b22" />
+  <line x1="0" y1="38" x2="880" y2="38" stroke="#30363d" stroke-width="1" />
+
+  <text x="20" y="24" fill="#e6edf3" class="font-sans" font-size="13" font-weight="700">
+    ⚡ OT/ICS Threat Radar &amp; Physical Consequence Drift
+  </text>
+  <rect x="700" y="9" width="165" height="20" rx="3" fill="#1f242c" stroke="#30363d" stroke-width="1" />
+  <circle cx="712" cy="19" r="3" fill="#00f0ff" class="gauge-pulse" />
+  <text x="722" y="23" fill="#00f0ff" class="font-mono" font-size="9" font-weight="700">
+    AIR-GAP ENGAGED (0.024ms)
+  </text>
+
+  <!-- 3 COLUMN LOWLIGHTER WIDGET DECK -->
+
+  <!-- COLUMN 1: DETECTION ENGINE GAUGE (Z-Score & F1-Score) -->
+  <g transform="translate(20, 55)">
+    <rect width="265" height="225" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="16" y="24" fill="#8b949e" class="font-mono" font-size="10" font-weight="700">DETECTION RADAR (HAI 23.05)</text>
+
+    <!-- Circular Gauge Center -->
+    <g transform="translate(132, 100)">
+      <!-- Outer Track -->
+      <circle cx="0" cy="0" r="52" fill="none" stroke="#21262d" stroke-width="10" />
+      <!-- Value Arc: 94.2% -->
+      <circle cx="0" cy="0" r="52" fill="none" stroke="#bfff2e" stroke-width="10"
+              stroke-dasharray="326" stroke-dashoffset="35" stroke-linecap="round"
+              transform="rotate(-90)" />
+      <text x="0" y="6" fill="#e6edf3" class="font-mono" font-size="18" font-weight="800" text-anchor="middle">94.2%</text>
+      <text x="0" y="22" fill="#8b949e" class="font-mono" font-size="8" font-weight="700" text-anchor="middle">RECALL</text>
+    </g>
+
+    <!-- Stats Breakdown Below Gauge -->
+    <g transform="translate(16, 175)">
+      <line x1="0" y1="0" x2="233" y2="0" stroke="#21262d" stroke-width="1" />
+      <text x="0" y="18" fill="#8b949e" class="font-mono" font-size="9">Z-Score Threshold:</text>
+      <text x="233" y="18" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">2.50 σ</text>
+
+      <text x="0" y="36" fill="#8b949e" class="font-mono" font-size="9">F1-Score / Accuracy:</text>
+      <text x="233" y="36" fill="#bfff2e" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">0.887 / 96.1%</text>
+    </g>
+  </g>
+
+  <!-- COLUMN 2: PHYSICAL TELEMETRY DRIFT GAUGES -->
+  <g transform="translate(305, 55)">
+    <rect width="270" height="225" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="16" y="24" fill="#8b949e" class="font-mono" font-size="10" font-weight="700">PHYSICS ENVELOPE MONITOR</text>
+
+    <!-- Meter 1: Rotor Speed (Hz) -->
+    <g transform="translate(16, 42)">
+      <text x="0" y="12" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">Generator Frequency</text>
+      <text x="238" y="12" fill="#bfff2e" class="font-mono" font-size="10" font-weight="800" text-anchor="end">50.02 Hz</text>
+      <rect x="0" y="18" width="238" height="6" rx="3" fill="#21262d" />
+      <rect x="0" y="18" width="128" height="6" rx="3" fill="#bfff2e" />
+      <!-- Overfrequency Trip Line at 52.5 Hz -->
+      <line x1="190" y1="15" x2="190" y2="27" stroke="#ff7b72" stroke-width="1.5" />
+      <text x="190" y="37" fill="#ff7b72" class="font-mono" font-size="7.5" text-anchor="middle">TRIP: 52.5 Hz</text>
+    </g>
+
+    <!-- Meter 2: Bearing Temp (C) -->
+    <g transform="translate(16, 96)">
+      <text x="0" y="12" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">Bearing Temperature</text>
+      <text x="238" y="12" fill="#ffbd2e" class="font-mono" font-size="10" font-weight="800" text-anchor="end">62.4 °C</text>
+      <rect x="0" y="18" width="238" height="6" rx="3" fill="#21262d" />
+      <rect x="0" y="18" width="150" height="6" rx="3" fill="#ffbd2e" />
+      <line x1="205" y1="15" x2="205" y2="27" stroke="#ff7b72" stroke-width="1.5" />
+      <text x="205" y="37" fill="#ff7b72" class="font-mono" font-size="7.5" text-anchor="middle">ALARM: 95 °C</text>
+    </g>
+
+    <!-- Meter 3: Residual Chlorine (PPM) -->
+    <g transform="translate(16, 150)">
+      <text x="0" y="12" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">Basin Chlorine (P3)</text>
+      <text x="238" y="12" fill="#00f0ff" class="font-mono" font-size="10" font-weight="800" text-anchor="end">1.45 ppm</text>
+      <rect x="0" y="18" width="238" height="6" rx="3" fill="#21262d" />
+      <rect x="0" y="18" width="80" height="6" rx="3" fill="#00f0ff" />
+      <line x1="180" y1="15" x2="180" y2="27" stroke="#ff7b72" stroke-width="1.5" />
+      <text x="180" y="37" fill="#ff7b72" class="font-mono" font-size="7.5" text-anchor="middle">MAX: 4.0 ppm</text>
+    </g>
+
+    <text x="16" y="214" fill="#8b949e" class="font-mono" font-size="8">
+      STATUS: PHYSICAL ENVELOPE PROTECTED (0 MW SHED)
+    </text>
+  </g>
+
+  <!-- COLUMN 3: PURDUE ZONE NODE MATRIX -->
+  <g transform="translate(595, 55)">
+    <rect width="265" height="225" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="16" y="24" fill="#8b949e" class="font-mono" font-size="10" font-weight="700">PURDUE LEVEL STATUS</text>
+
+    <!-- Node Row 1: EWS-04 -->
+    <g transform="translate(16, 38)">
+      <rect width="233" height="30" rx="3" fill="#21262d" />
+      <text x="10" y="19" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">L4 · EWS-04</text>
+      <text x="100" y="19" fill="#8b949e" class="font-mono" font-size="8.5">Dell Win10</text>
+      <rect x="165" y="7" width="60" height="16" rx="2" fill="#3a1515" />
+      <text x="195" y="18" fill="#ff7b72" class="font-mono" font-size="7.5" font-weight="800" text-anchor="middle">BREACHED</text>
+    </g>
+
+    <!-- Node Row 2: SW-A -->
+    <g transform="translate(16, 74)">
+      <rect width="233" height="30" rx="3" fill="#21262d" />
+      <text x="10" y="19" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">L2 · SW-A</text>
+      <text x="100" y="19" fill="#8b949e" class="font-mono" font-size="8.5">Hirschmann</text>
+      <rect x="165" y="7" width="60" height="16" rx="2" fill="#3a1515" />
+      <text x="195" y="18" fill="#ff7b72" class="font-mono" font-size="7.5" font-weight="800" text-anchor="middle">ISOLATED</text>
+    </g>
+
+    <!-- Node Row 3: PLC-3 -->
+    <g transform="translate(16, 110)">
+      <rect width="233" height="30" rx="3" fill="#21262d" />
+      <text x="10" y="19" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">L1 · PLC-3</text>
+      <text x="100" y="19" fill="#8b949e" class="font-mono" font-size="8.5">Siemens S7</text>
+      <rect x="165" y="7" width="60" height="16" rx="2" fill="#003344" />
+      <text x="195" y="18" fill="#00f0ff" class="font-mono" font-size="7.5" font-weight="800" text-anchor="middle">AIR-GAPPED</text>
+    </g>
+
+    <!-- Node Row 4: CENT-Δ -->
+    <g transform="translate(16, 146)">
+      <rect width="233" height="30" rx="3" fill="#21262d" />
+      <text x="10" y="19" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">L0 · CENT-Δ</text>
+      <text x="100" y="19" fill="#8b949e" class="font-mono" font-size="8.5">14MW Gen</text>
+      <rect x="165" y="7" width="60" height="16" rx="2" fill="#1b2e11" />
+      <text x="195" y="18" fill="#bfff2e" class="font-mono" font-size="7.5" font-weight="800" text-anchor="middle">NOMINAL</text>
+    </g>
+
+    <!-- Node Row 5: BRK-33B -->
+    <g transform="translate(16, 182)">
+      <rect width="233" height="30" rx="3" fill="#21262d" />
+      <text x="10" y="19" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">L0 · BRK-33B</text>
+      <text x="100" y="19" fill="#8b949e" class="font-mono" font-size="8.5">GE Breaker</text>
+      <rect x="165" y="7" width="60" height="16" rx="2" fill="#1b2e11" />
+      <text x="195" y="18" fill="#bfff2e" class="font-mono" font-size="7.5" font-weight="800" text-anchor="middle">CLOSED (OK)</text>
+    </g>
+  </g>
+</svg>

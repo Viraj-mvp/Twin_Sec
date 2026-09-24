@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 220" width="100%" height="100%">
+  <defs>
+    <style>
+      @keyframes prompt-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      .font-mono {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      }
+      .cursor {
+        animation: prompt-blink 0.9s infinite steps(1);
+      }
+    </style>
+  </defs>
+
+  <!-- Terminal Window Base -->
+  <rect width="940" height="220" fill="#090a0d" stroke="#252936" stroke-width="2" />
+  
+  <!-- Header Bar -->
+  <rect width="940" height="26" fill="#14161f" stroke="#252936" stroke-width="1" />
+  <circle cx="15" cy="13" r="4.5" fill="#ff4d4d" />
+  <circle cx="30" cy="13" r="4.5" fill="#FFB800" />
+  <circle cx="45" cy="13" r="4.5" fill="#BFFF2E" />
+  <text x="65" y="17" fill="#8892a4" class="font-mono" font-size="10" font-weight="700">
+    root@twinsec: ~/cyber-range (bash) · Offensive / Defensive Operator CLI
+  </text>
+  <rect x="790" y="5" width="135" height="16" fill="#1b1e28" stroke="#323846" stroke-width="1" />
+  <text x="857" y="16" fill="#00f0ff" class="font-mono" font-size="8.5" font-weight="800" text-anchor="middle">
+    CLI RUNTIME ACTIVE
+  </text>
+
+  <!-- Terminal Content Lines -->
+  <g transform="translate(18, 48)">
+    <!-- Line 1: Input -->
+    <text x="0" y="0" fill="#BFFF2E" class="font-mono" font-size="11.5" font-weight="700">root@twinsec:~#</text>
+    <text x="125" y="0" fill="#F5F3E7" class="font-mono" font-size="11.5">scan --all</text>
+
+    <!-- Line 2: Output -->
+    <text x="0" y="18" fill="#8892a4" class="font-mono" font-size="10.5">[*] ENUMERATING PURDUE OT TOPOLOGY NODES...</text>
+    <text x="0" y="34" fill="#8892a4" class="font-mono" font-size="10.5">  - EWS-04   (IT/L4)   : [BREACHED] · HIRSCHMANN TUNNEL COMPROMISED</text>
+    <text x="0" y="50" fill="#8892a4" class="font-mono" font-size="10.5">  - HIST-PI  (DMZ/L3.5): [BREACHED] · OPC-UA REPLAY BUFFER PRIMED</text>
+    <text x="0" y="66" fill="#ff4d4d" class="font-mono" font-size="10.5" font-weight="700">  - PLC-3    (OT/L1)   : [TARGETED] · SIEMENS S7-1500 · SPEED SETPOINT DRIFT</text>
+
+    <!-- Line 3: Air-Gap Execution -->
+    <text x="0" y="90" fill="#BFFF2E" class="font-mono" font-size="11.5" font-weight="700">root@twinsec:~#</text>
+    <text x="125" y="90" fill="#F5F3E7" class="font-mono" font-size="11.5">isolate plc-3</text>
+
+    <!-- Line 4: Severance Confirmation -->
+    <text x="0" y="108" fill="#00f0ff" class="font-mono" font-size="10.5" font-weight="700">[+] BFS AIR-GAP ENGINE: Node 'plc-3' isolated from Level 2 OT switch in 0.024ms</text>
+    <text x="0" y="124" fill="#BFFF2E" class="font-mono" font-size="10.5">[+] CASCADE ARRESTED: Physical process envelope held. 0 MW load shed. Rotor protected.</text>
+
+    <!-- Line 5: Sigma Export -->
+    <text x="0" y="148" fill="#BFFF2E" class="font-mono" font-size="11.5" font-weight="700">root@twinsec:~#</text>
+    <text x="125" y="148" fill="#F5F3E7" class="font-mono" font-size="11.5">sigma --export --mitre=T0855</text>
+    <rect x="365" y="137" width="7" height="13" fill="#BFFF2E" class="cursor" />
+  </g>
+</svg>

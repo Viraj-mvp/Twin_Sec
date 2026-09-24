@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 360" width="100%" height="100%">
+  <defs>
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+      @keyframes progress-fill {
+        0% { stroke-dashoffset: 280; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes glow-line {
+        0%, 100% { filter: drop-shadow(0 0 2px #bfff2e); }
+        50% { filter: drop-shadow(0 0 6px #bfff2e); }
+      }
+      .font-sans {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      }
+      .font-mono {
+        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .status-pulse {
+        animation: pulse 2s infinite ease-in-out;
+      }
+      .glow-border {
+        animation: glow-line 3s infinite ease-in-out;
+      }
+    </style>
+
+    <linearGradient id="metricGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#bfff2e" />
+      <stop offset="50%" stop-color="#00f0ff" />
+      <stop offset="100%" stop-color="#9d4edd" />
+    </linearGradient>
+  </defs>
+
+  <!-- Card Background (Lowlighter Dark Theme) -->
+  <rect width="880" height="360" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.5" />
+
+  <!-- Top Decorative Header Strip -->
+  <path d="M 0 6 A 6 6 0 0 1 6 0 L 874 0 A 6 6 0 0 1 880 6 L 880 40 L 0 40 Z" fill="#161b22" />
+  <line x1="0" y1="40" x2="880" y2="40" stroke="#30363d" stroke-width="1" />
+
+  <!-- Window Dots / Icons -->
+  <circle cx="20" cy="20" r="5" fill="#ff5f56" stroke="#e0443e" stroke-width="0.5" />
+  <circle cx="36" cy="20" r="5" fill="#ffbd2e" stroke="#dea123" stroke-width="0.5" />
+  <circle cx="52" cy="20" r="5" fill="#27c93f" stroke="#1aab29" stroke-width="0.5" />
+
+  <!-- Card Title -->
+  <text x="75" y="24" fill="#e6edf3" class="font-sans" font-size="13" font-weight="700">
+    TwinSec // Real-Time Cyber-Physical System Metrics
+  </text>
+  <rect x="735" y="11" width="130" height="18" rx="3" fill="#1f242c" stroke="#30363d" stroke-width="1" />
+  <circle cx="745" cy="20" r="3" fill="#bfff2e" class="status-pulse" />
+  <text x="754" y="23" fill="#bfff2e" class="font-mono" font-size="9" font-weight="700">
+    SYSTEM OPTIMAL
+  </text>
+
+  <!-- 4 PRIMARY KPI METRIC CARDS -->
+  <!-- Stat 1: BFS Air-Gap Latency -->
+  <g transform="translate(20, 55)">
+    <rect width="195" height="72" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="14" y="24" fill="#8b949e" class="font-mono" font-size="9.5" font-weight="600">AIR-GAP SEVERANCE</text>
+    <text x="14" y="52" fill="#00f0ff" class="font-mono" font-size="22" font-weight="800">&lt; 0.03 ms</text>
+    <text x="180" y="52" fill="#8b949e" class="font-mono" font-size="9" text-anchor="end">BFS GRAPH</text>
+    <circle cx="180" cy="20" r="3.5" fill="#00f0ff" />
+  </g>
+
+  <!-- Stat 2: Process Math ODE Ticks -->
+  <g transform="translate(230, 55)">
+    <rect width="195" height="72" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="14" y="24" fill="#8b949e" class="font-mono" font-size="9.5" font-weight="600">PROCESS PHYSICS</text>
+    <text x="14" y="52" fill="#bfff2e" class="font-mono" font-size="22" font-weight="800">100% ODE</text>
+    <text x="180" y="52" fill="#8b949e" class="font-mono" font-size="9" text-anchor="end">SWING/MASS</text>
+    <circle cx="180" cy="20" r="3.5" fill="#bfff2e" />
+  </g>
+
+  <!-- Stat 3: Benchmark Test Integrity -->
+  <g transform="translate(440, 55)">
+    <rect width="195" height="72" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="14" y="24" fill="#8b949e" class="font-mono" font-size="9.5" font-weight="600">TOPOLOGY SUITE</text>
+    <text x="14" y="52" fill="#e6edf3" class="font-mono" font-size="22" font-weight="800">46 / 46</text>
+    <text x="180" y="52" fill="#27c93f" class="font-mono" font-size="9" text-anchor="end">PASSED ✓</text>
+    <circle cx="180" cy="20" r="3.5" fill="#27c93f" />
+  </g>
+
+  <!-- Stat 4: MITRE ICS Coverage -->
+  <g transform="translate(650, 55)">
+    <rect width="210" height="72" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="14" y="24" fill="#8b949e" class="font-mono" font-size="9.5" font-weight="600">MITRE ICS MAPPINGS</text>
+    <text x="14" y="52" fill="#ff7b72" class="font-mono" font-size="22" font-weight="800">81 TTPs</text>
+    <text x="195" y="52" fill="#8b949e" class="font-mono" font-size="9" text-anchor="end">STIX 2.1</text>
+    <circle cx="195" cy="20" r="3.5" fill="#ff7b72" />
+  </g>
+
+  <!-- MIDDLE SECTION: TECHNOLOGY & STACK PROGRESS BAR (LOWLIGHTER STYLE) -->
+  <g transform="translate(20, 145)">
+    <text x="0" y="15" fill="#e6edf3" class="font-sans" font-size="12" font-weight="700">Platform Technology Breakdown</text>
+    
+    <!-- Multi-segmented Progress Bar -->
+    <g transform="translate(0, 25)">
+      <!-- Base Background -->
+      <rect width="840" height="9" rx="4.5" fill="#21262d" />
+      
+      <!-- TanStack Start + React 19 (45%) -->
+      <rect x="0" width="378" height="9" rx="4.5" fill="#61dafb" />
+      <!-- TypeScript Architecture (25%) -->
+      <rect x="378" width="210" height="9" fill="#3178c6" />
+      <!-- SQLite WAL & Drizzle ORM (15%) -->
+      <rect x="588" width="126" height="9" fill="#bfff2e" />
+      <!-- Binary Protocol Engines (10%) -->
+      <rect x="714" width="84" height="9" fill="#00f0ff" />
+      <!-- CSS Neo-Brutalist & GSAP (5%) -->
+      <rect x="798" width="42" height="9" rx="4.5" fill="#ff7b72" />
+    </g>
+
+    <!-- Legend Items -->
+    <g transform="translate(0, 48)">
+      <circle cx="5" cy="5" r="4" fill="#61dafb" />
+      <text x="15" y="9" fill="#8b949e" class="font-mono" font-size="9.5">TanStack / React 19 <tspan fill="#e6edf3" font-weight="700">45%</tspan></text>
+
+      <circle cx="215" cy="5" r="4" fill="#3178c6" />
+      <text x="225" y="9" fill="#8b949e" class="font-mono" font-size="9.5">TypeScript 5.8 <tspan fill="#e6edf3" font-weight="700">25%</tspan></text>
+
+      <circle cx="395" cy="5" r="4" fill="#bfff2e" />
+      <text x="405" y="9" fill="#8b949e" class="font-mono" font-size="9.5">SQLite WAL / Drizzle <tspan fill="#e6edf3" font-weight="700">15%</tspan></text>
+
+      <circle cx="585" cy="5" r="4" fill="#00f0ff" />
+      <text x="595" y="9" fill="#8b949e" class="font-mono" font-size="9.5">Binary Decoders <tspan fill="#e6edf3" font-weight="700">10%</tspan></text>
+
+      <circle cx="745" cy="5" r="4" fill="#ff7b72" />
+      <text x="755" y="9" fill="#8b949e" class="font-mono" font-size="9.5">Brutalist UI <tspan fill="#e6edf3" font-weight="700">5%</tspan></text>
+    </g>
+  </g>
+
+  <!-- BOTTOM SECTION: VERIFIED INDUSTRIAL BADGES & CAPABILITIES -->
+  <g transform="translate(20, 230)">
+    <line x1="0" y1="0" x2="840" y2="0" stroke="#21262d" stroke-width="1" />
+    <text x="0" y="24" fill="#e6edf3" class="font-sans" font-size="12" font-weight="700">Industrial Security Capabilities &amp; Verification Badges</text>
+
+    <!-- Row of Achievement Pills -->
+    <g transform="translate(0, 38)">
+      <!-- Badge 1: Seeded PRNG Determinism -->
+      <g transform="translate(0, 0)">
+        <rect width="195" height="38" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+        <rect x="0" width="4" height="38" rx="2" fill="#bfff2e" />
+        <text x="14" y="16" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">DETERMINISTIC TWIN</text>
+        <text x="14" y="30" fill="#8b949e" class="font-mono" font-size="8.5">Mulberry32 Bit-for-Bit Replay</text>
+      </g>
+
+      <!-- Badge 2: HAI 23.05 Testbed Replay -->
+      <g transform="translate(210, 0)">
+        <rect width="195" height="38" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+        <rect x="0" width="4" height="38" rx="2" fill="#ffbd2e" />
+        <text x="14" y="16" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">HAI 23.05 DATASET</text>
+        <text x="14" y="30" fill="#8b949e" class="font-mono" font-size="8.5">4 Process Loops (P1–P4)</text>
+      </g>
+
+      <!-- Badge 3: Binary Protocol Parsing -->
+      <g transform="translate(420, 0)">
+        <rect width="200" height="38" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+        <rect x="0" width="4" height="38" rx="2" fill="#00f0ff" />
+        <text x="14" y="16" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">MODBUS &amp; DNP3 DECODERS</text>
+        <text x="14" y="30" fill="#8b949e" class="font-mono" font-size="8.5">FC03/06/16 + CRC-16 Verified</text>
+      </g>
+
+      <!-- Badge 4: AI Failover Gateway -->
+      <g transform="translate(635, 0)">
+        <rect width="205" height="38" rx="4" fill="#161b22" stroke="#30363d" stroke-width="1" />
+        <rect x="0" width="4" height="38" rx="2" fill="#9d4edd" />
+        <text x="14" y="16" fill="#e6edf3" class="font-mono" font-size="9.5" font-weight="700">MULTI-PROVIDER AI SDK</text>
+        <text x="14" y="30" fill="#8b949e" class="font-mono" font-size="8.5">Groq · Gemini · Cerebras · Ollama</text>
+      </g>
+    </g>
+
+    <!-- Sub-footer summary bar -->
+    <g transform="translate(0, 92)">
+      <text x="0" y="0" fill="#8b949e" class="font-mono" font-size="9">
+        TARGET: NIST SP 800-82r3 · IEC 62443-3-3 · MITRE ATT&amp;CK FOR ICS · HAI KOREAN TESTBED BENCHMARK
+      </text>
+      <text x="840" y="0" fill="#bfff2e" class="font-mono" font-size="9" text-anchor="end" font-weight="700">
+        STATUS: 100% OPERATIONAL
+      </text>
+    </g>
+  </g>
+</svg>

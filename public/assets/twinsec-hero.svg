@@ -1,0 +1,217 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 360" width="100%" height="100%">
+  <defs>
+    <!-- Grid Pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1f222b" stroke-width="1" />
+      <circle cx="40" cy="40" r="1.5" fill="#323846" />
+    </pattern>
+
+    <!-- Hazard Stripes Pattern -->
+    <pattern id="hazard" width="24" height="24" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="12" height="24" fill="#BFFF2E" />
+      <rect x="12" y="0" width="12" height="24" fill="#0D0E12" />
+    </pattern>
+
+    <!-- Animations -->
+    <style>
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      @keyframes pulse-glow {
+        0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 2px #BFFF2E); }
+        50% { opacity: 0.3; filter: drop-shadow(0 0 0px #BFFF2E); }
+      }
+      @keyframes radar-sweep {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes scanline {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(360px); }
+      }
+      @keyframes stream-flow {
+        0% { stroke-dashoffset: 40; }
+        100% { stroke-dashoffset: 0; }
+      }
+      .font-mono {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      }
+      .font-display {
+        font-family: 'Impact', 'Bebas Neue', 'Trebuchet MS', sans-serif;
+        font-weight: 900;
+        letter-spacing: 2px;
+      }
+      .blinking-cursor {
+        animation: blink 0.9s infinite steps(1);
+      }
+      .ping-beacon {
+        animation: pulse-glow 1.8s infinite ease-in-out;
+      }
+      .radar-needle {
+        transform-origin: 860px 180px;
+        animation: radar-sweep 4s linear infinite;
+      }
+      .circuit-flow {
+        stroke-dasharray: 6 6;
+        animation: stream-flow 1.2s linear infinite;
+      }
+    </style>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1000" height="360" fill="#0e0f14" />
+  <rect width="1000" height="360" fill="url(#grid)" />
+
+  <!-- Outer Heavy Industrial Border -->
+  <rect x="6" y="6" width="988" height="348" fill="none" stroke="#222530" stroke-width="2" />
+  <rect x="12" y="12" width="976" height="336" fill="none" stroke="#BFFF2E" stroke-width="3" />
+
+  <!-- Top Hazard Tape Bar -->
+  <rect x="15" y="15" width="970" height="12" fill="url(#hazard)" />
+
+  <!-- Corner Brackets -->
+  <path d="M 24 45 L 24 25 L 45 25" fill="none" stroke="#BFFF2E" stroke-width="3" />
+  <path d="M 976 45 L 976 25 L 955 25" fill="none" stroke="#BFFF2E" stroke-width="3" />
+  <path d="M 24 315 L 24 335 L 45 335" fill="none" stroke="#BFFF2E" stroke-width="3" />
+  <path d="M 976 315 L 976 335 L 955 335" fill="none" stroke="#BFFF2E" stroke-width="3" />
+
+  <!-- Top Status Strip -->
+  <g transform="translate(30, 48)">
+    <!-- Concentric LED Beacon -->
+    <circle cx="10" cy="8" r="6" fill="#BFFF2E" class="ping-beacon" opacity="0.4" />
+    <circle cx="10" cy="8" r="3" fill="#BFFF2E" />
+    <text x="24" y="12" fill="#BFFF2E" class="font-mono" font-size="11" font-weight="700" letter-spacing="1.5">
+      SEC-DEF // PURDUE L0-L4 ONLINE
+    </text>
+
+    <!-- Badges -->
+    <rect x="290" y="0" width="140" height="18" fill="#181a22" stroke="#323846" stroke-width="1.5" />
+    <text x="360" y="13" fill="#00f0ff" class="font-mono" font-size="9.5" font-weight="700" text-anchor="middle">
+      BFS AIR-GAP: ACTIVE
+    </text>
+
+    <rect x="440" y="0" width="130" height="18" fill="#181a22" stroke="#323846" stroke-width="1.5" />
+    <text x="505" y="13" fill="#FFB800" class="font-mono" font-size="9.5" font-weight="700" text-anchor="middle">
+      HAI 23.05 BENCHMARK
+    </text>
+
+    <rect x="580" y="0" width="115" height="18" fill="#181a22" stroke="#323846" stroke-width="1.5" />
+    <text x="637" y="13" fill="#ff4d4d" class="font-mono" font-size="9.5" font-weight="700" text-anchor="middle">
+      MITRE ICS STIX 2.1
+    </text>
+  </g>
+
+  <!-- Big Display Title -->
+  <g transform="translate(30, 150)">
+    <!-- Offset Comic Shadow -->
+    <text x="6" y="6" fill="#000000" class="font-display" font-size="82">
+      TWINSEC
+    </text>
+    <!-- Neon Lime Accent Shadow -->
+    <text x="3" y="3" fill="#587e07" class="font-display" font-size="82">
+      TWINSEC
+    </text>
+    <!-- Foreground Text -->
+    <text x="0" y="0" fill="#F5F3E7" class="font-display" font-size="82">
+      TWINSEC
+    </text>
+
+    <!-- Subtitle Banner -->
+    <rect x="2" y="16" width="530" height="26" fill="#BFFF2E" stroke="#000000" stroke-width="2" />
+    <text x="12" y="34" fill="#0D0E12" class="font-mono" font-size="12.5" font-weight="900" letter-spacing="1">
+      INDUSTRIAL CYBER-PHYSICAL RANGE &amp; DIGITAL TWIN PLATFORM
+    </text>
+
+    <text x="4" y="62" fill="#8892a4" class="font-mono" font-size="11.5" letter-spacing="0.5">
+      Differential Process Physics · Purdue BFS Air-Gap Engine · Modbus &amp; DNP3 Decoders
+    </text>
+  </g>
+
+  <!-- Interactive Mini Radar on the Right -->
+  <g transform="translate(860, 180)">
+    <!-- Radar Base Circles -->
+    <circle cx="0" cy="0" r="70" fill="#13151c" stroke="#2a2e3d" stroke-width="2" />
+    <circle cx="0" cy="0" r="50" fill="none" stroke="#222634" stroke-width="1.5" stroke-dasharray="3 3" />
+    <circle cx="0" cy="0" r="30" fill="none" stroke="#222634" stroke-width="1.5" stroke-dasharray="3 3" />
+    <line x1="-70" y1="0" x2="70" y2="0" stroke="#222634" stroke-width="1.5" />
+    <line x1="0" y1="-70" x2="0" y2="70" stroke="#222634" stroke-width="1.5" />
+
+    <!-- Radar Target Nodes -->
+    <circle cx="-32" cy="-22" r="3.5" fill="#ff4d4d" />
+    <text x="-30" y="-28" fill="#ff4d4d" class="font-mono" font-size="8" font-weight="700">PLC-3</text>
+
+    <circle cx="28" cy="35" r="3" fill="#00f0ff" />
+    <text x="34" y="38" fill="#00f0ff" class="font-mono" font-size="8" font-weight="700">AIR-GAP</text>
+
+    <circle cx="0" cy="-46" r="3" fill="#BFFF2E" />
+    <text x="6" y="-44" fill="#BFFF2E" class="font-mono" font-size="8" font-weight="700">EWS-04</text>
+
+    <!-- Sweeping Needle -->
+    <line x1="0" y1="0" x2="68" y2="0" stroke="#BFFF2E" stroke-width="2" class="radar-needle" opacity="0.85" />
+    
+    <!-- Radar Label Header -->
+    <rect x="-65" y="-84" width="130" height="15" fill="#181a22" stroke="#323846" stroke-width="1" />
+    <text x="0" y="-73" fill="#BFFF2E" class="font-mono" font-size="8.5" font-weight="700" text-anchor="middle">
+      RADAR: PURDUE RINGS
+    </text>
+  </g>
+
+  <!-- Live Telemetry Capsule (Center-Right) -->
+  <g transform="translate(605, 120)">
+    <rect x="0" y="0" width="165" height="120" fill="#12141b" stroke="#252936" stroke-width="2" />
+    <rect x="0" y="0" width="165" height="20" fill="#1b1e28" stroke="#252936" stroke-width="1" />
+    <text x="10" y="14" fill="#F5F3E7" class="font-mono" font-size="9" font-weight="700">
+      PHYSICS DRIFT HUD
+    </text>
+
+    <!-- Metrics -->
+    <text x="10" y="38" fill="#8892a4" class="font-mono" font-size="9">ROTOR FREQ:</text>
+    <text x="155" y="38" fill="#BFFF2E" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">50.02 Hz</text>
+
+    <text x="10" y="58" fill="#8892a4" class="font-mono" font-size="9">BEARING TEMP:</text>
+    <text x="155" y="58" fill="#FFB800" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">62.4 °C</text>
+
+    <text x="10" y="78" fill="#8892a4" class="font-mono" font-size="9">FEED PRESSURE:</text>
+    <text x="155" y="78" fill="#00f0ff" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">8.21 bar</text>
+
+    <text x="10" y="98" fill="#8892a4" class="font-mono" font-size="9">RESIDUAL CL2:</text>
+    <text x="155" y="98" fill="#ff4d4d" class="font-mono" font-size="9.5" font-weight="700" text-anchor="end">1.45 ppm</text>
+
+    <rect x="0" y="108" width="165" height="12" fill="#0d0e12" />
+    <line x1="0" y1="108" x2="165" y2="108" stroke="#252936" stroke-width="1" />
+    <text x="82" y="117" fill="#BFFF2E" class="font-mono" font-size="7.5" font-weight="700" text-anchor="middle">
+      ODE STEP: Δt = 1.0s [NOMINAL]
+    </text>
+  </g>
+
+  <!-- Bottom Tactical Terminal Cockpit Bar -->
+  <g transform="translate(30, 275)">
+    <!-- Terminal Chassis -->
+    <rect x="0" y="0" width="940" height="52" fill="#090a0d" stroke="#252936" stroke-width="2" />
+    <rect x="0" y="0" width="940" height="18" fill="#161820" stroke="#252936" stroke-width="1" />
+
+    <!-- Terminal Window Dots -->
+    <circle cx="12" cy="9" r="3.5" fill="#ff4d4d" />
+    <circle cx="24" cy="9" r="3.5" fill="#FFB800" />
+    <circle cx="36" cy="9" r="3.5" fill="#BFFF2E" />
+
+    <text x="50" y="13" fill="#8892a4" class="font-mono" font-size="8.5" font-weight="700">
+      root@twinsec: ~/cyber-range (bash) · Active Session
+    </text>
+
+    <!-- Terminal Command Line with Typing Animation Simulation -->
+    <text x="14" y="38" fill="#BFFF2E" class="font-mono" font-size="12" font-weight="700">
+      root@twinsec:~#
+    </text>
+    <text x="135" y="38" fill="#F5F3E7" class="font-mono" font-size="12" font-weight="600">
+      twinsec-cli --sector=power --isolate=plc-3 --stream=hai-23.05
+    </text>
+    <rect x="635" y="27" width="8" height="14" fill="#BFFF2E" class="blinking-cursor" />
+
+    <rect x="750" y="25" width="175" height="20" fill="#181a22" stroke="#BFFF2E" stroke-width="1" />
+    <text x="837" y="38" fill="#BFFF2E" class="font-mono" font-size="9" font-weight="700" text-anchor="middle">
+      CASCADE ARRESTED: &lt;0.03ms
+    </text>
+  </g>
+</svg>
