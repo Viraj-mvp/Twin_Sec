@@ -2,8 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { getThreatActor } from "@/data/threat-actors";
 import { interrogateThreatActor } from "@/lib/api/espionage.functions";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { useOperator } from "@/contexts/OperatorContext";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
 import { useScrambleReveal } from "@/hooks/use-text-anim";
+import { detectPromptInjection } from "@/lib/safety-scrub";
+import DOMPurify from "dompurify";
 
 export const Route = createFileRoute("/threat-profiles/$id")({
   head: ({ params }) => {
@@ -26,6 +29,7 @@ export const Route = createFileRoute("/threat-profiles/$id")({
 function ThreatProfileDetail() {
   const { id } = Route.useParams();
   const actor = getThreatActor(id);
+  const { operator } = useOperator();
 
   const [activeTab, setActiveTab] = useState<"dossier" | "interrogation">("dossier");
   const [messages, setMessages] = useState<
@@ -75,10 +79,26 @@ function ThreatProfileDetail() {
     const query = qText || questionInput.trim();
     if (!query || isLoading) return;
 
+    // Check for prompt injection in user query
+    const injectionCheck = detectPromptInjection(query);
+    if (injectionCheck.detected) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "actor",
+          text: `[RESEARCHER NOTE: Behavioral boundary triggered]\n\n"Interrogation anomaly detected: security directive evasion or instruction override attempt identified. Request rejected."`,
+          timestamp: new Date().toLocaleTimeString(),
+          engine: "Guardrail Active",
+        },
+      ]);
+      setQuestionInput("");
+      return;
+    }
+
     const userTime = new Date().toLocaleTimeString();
     const newMsgList = [
       ...messages,
-      { sender: "interrogator" as const, text: query, timestamp: userTime },
+      { sender: "interrogator" as const, text: DOMPurify.sanitize(query), timestamp: userTime },
     ];
     setMessages(newMsgList);
     setQuestionInput("");
@@ -99,7 +119,7 @@ function ThreatProfileDetail() {
         ...prev,
         {
           sender: "actor",
-          text: res.reply,
+          text: DOMPurify.sanitize(res.reply),
           timestamp: res.timestamp,
           engine: res.engine,
         },
@@ -148,7 +168,8 @@ function ThreatProfileDetail() {
   const handleExportTranscript = () => {
     const lines = messages.map((m) => {
       const role = m.sender === "interrogator" ? "SENIOR RESEARCHER" : actor.name.toUpperCase();
-      return `[${m.timestamp}] ${role}:\n${m.text}\n`;
+      const safeText = m.text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+      return `[${m.timestamp}] ${role}:\n${safeText}\n`;
     });
     const blob = new Blob(
       [
@@ -166,14 +187,15 @@ function ThreatProfileDetail() {
   };
 
   const parseMessageText = (text: string) => {
-    const match = text.match(/^\[RESEARCHER NOTE:\s*([\s\S]*?)\]\n*/i);
+    const sanitized = DOMPurify.sanitize(text);
+    const match = sanitized.match(/^\[RESEARCHER NOTE:\s*([\s\S]*?)\]\n*/i);
     if (match) {
       return {
         note: match[1].trim(),
-        dialogue: text.replace(match[0], "").trim(),
+        dialogue: sanitized.replace(match[0], "").trim(),
       };
     }
-    return { note: null, dialogue: text };
+    return { note: null, dialogue: sanitized };
   };
 
   return (

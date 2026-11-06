@@ -1,15 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import facility from "@/assets/facility.jpg";
-import schematic from "@/assets/schematic.jpg";
+import schematic from "@/assets/schematic-power.jpg";
 import breaker from "@/assets/breaker.jpg";
 import mindhunterImg from "@/assets/mindhunter.png";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { useSplitCharReveal, useScrambleReveal, useWordReveal } from "@/hooks/use-text-anim";
-import { Footer } from "../components/Footer";
+import { Footer } from "@/components/layout/Footer";
 import FlowArt, { FlowSection } from "@/components/ui/story-scroll";
 import { pushNavSection } from "@/lib/nav-stack";
-import { TwinSecMatrixCanvas } from "@/components/TwinSecMatrixCanvas";
+import { AsciiNetworkTopology } from "@/components/canvas/AsciiNetworkTopology";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -57,9 +57,44 @@ function Marquee() {
   );
 }
 
+function useLiveClock() {
+  const fmt = () => {
+    const now = new Date();
+    const months = [
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC",
+    ];
+    const d = String(now.getUTCDate()).padStart(2, "0");
+    const m = months[now.getUTCMonth()];
+    const y = now.getUTCFullYear();
+    const h = String(now.getUTCHours()).padStart(2, "0");
+    const min = String(now.getUTCMinutes()).padStart(2, "0");
+    const s = String(now.getUTCSeconds()).padStart(2, "0");
+    return `${d} ${m} ${y} · ${h}:${min}:${s} UTC`;
+  };
+  const [clock, setClock] = useState<string>(fmt);
+  useEffect(() => {
+    setClock(fmt());
+    const id = setInterval(() => setClock(fmt()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return clock;
+}
+
 function Hero() {
   const heroRef = useSplitCharReveal<HTMLHeadingElement>();
   const leadRef = useWordReveal<HTMLParagraphElement>();
+  const liveClock = useLiveClock();
   return (
     <section className="relative border-b border-rule overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-40" />
@@ -83,14 +118,17 @@ function Hero() {
           <span className="hidden md:inline text-accent font-bold tracking-[0.2em]">
             FIELD REPORT · SECTOR 9 · TURBINE HALL
           </span>
-          <span className="text-foreground/90 font-medium">17 JUN 2026 · 04:17 UTC</span>
+          <span className="text-foreground/90 font-medium inline-flex items-center gap-1.5">
+            <span className="inline-block size-1.5 bg-[#BFFF2E] animate-pulse" />
+            {liveClock}
+          </span>
         </div>
 
         <div className="grid grid-cols-12 gap-8 items-center">
           <div className="col-span-12 lg:col-span-7">
             <h1
               ref={heroRef}
-              className="display text-[16vw] md:text-[12vw] lg:text-[135px] xl:text-[160px] leading-[0.82] overflow-hidden"
+              className="display text-[18vw] md:text-[14vw] lg:text-[130px] xl:text-[150px] leading-[0.82] overflow-hidden"
             >
               ATTACKS
               <br />
@@ -99,16 +137,12 @@ function Hero() {
               <span className="text-accent">DIGITAL.</span>
             </h1>
           </div>
-
           <div className="col-span-12 lg:col-span-5 flex justify-center lg:justify-end">
-            <TwinSecMatrixCanvas />
+            <AsciiNetworkTopology className="w-full max-w-[620px]" />
           </div>
         </div>
 
-        <div
-          className="mt-16 grid grid-cols-12 gap-6 animate-reveal"
-          style={{ animationDelay: "0.2s" }}
-        >
+        <div className="mt-16 grid grid-cols-12 gap-6 animate-reveal">
           <div className="col-span-12 md:col-span-5 md:col-start-2">
             <p className="mono-label mb-4">A FIELD MANUAL</p>
             <p
@@ -198,108 +232,6 @@ function Manifesto() {
               with no spilled coolant.
             </p>
           </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function BriefingHub() {
-  const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
-  const hubs = [
-    {
-      title: "DEF CON 33 BRIEF",
-      sub: "ICS VILLAGE STAGE",
-      desc: "Live twin engine & relay manipulation in 90 seconds.",
-      to: "/def-con-brief",
-      badge: "KEYNOTE DEMO",
-    },
-    {
-      title: "S4X26 MIAMI TALK",
-      sub: "STAGE A KEYNOTE",
-      desc: "Silent interlock bypass in SIL-3 safety systems.",
-      to: "/s4-talk",
-      badge: "SAFETY RESEARCH",
-    },
-    {
-      title: "RESEARCH WHITEPAPERS",
-      sub: "USENIX · IEEE S&P · ACM CCS",
-      desc: "Peer-reviewed deviation bounds & twin engine architectures.",
-      to: "/whitepapers",
-      badge: "PUBLICATIONS",
-    },
-    {
-      title: "DECLASSIFIED FIELD REPORTS",
-      sub: "VOL. VII · 2026",
-      desc: "Incident timelines reconstructed from live twin runs.",
-      to: "/field-reports",
-      badge: "INCIDENT LOGS",
-    },
-    {
-      title: "HISTORICAL CASE FILES",
-      sub: "MITRE ATT&CK ICS MAPPED",
-      desc: "Declassified breakdowns of Stuxnet, Industroyer, & Colonial.",
-      to: "/case-files",
-      badge: "HISTORICAL INTEL",
-    },
-    {
-      title: "MINDHUNTER BAU DOSSIERS",
-      sub: "FBI BEHAVIORAL ANALYSIS",
-      desc: "Threat psychology profiles for Sandworm, DarkSide & Volt Typhoon.",
-      to: "/threat-profiles",
-      badge: "PSYCHOLOGY",
-    },
-  ];
-
-  return (
-    <section id="briefing-hub" className="border-b border-rule bg-background w-full">
-      <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-20 space-y-10">
-        <div className="grid grid-cols-12 gap-8 border-b border-rule pb-8">
-          <div className="col-span-12 md:col-span-3 mono-label space-y-2">
-            <p>SECTION 02</p>
-            <p ref={scrambleRef} className="text-accent">
-              — BRIEFINGS &amp; RESEARCH
-            </p>
-          </div>
-          <div className="col-span-12 md:col-span-9 flex flex-col lg:flex-row justify-between lg:items-end gap-4">
-            <h2 className="display text-4xl sm:text-6xl lg:text-7xl leading-none">
-              INTELLIGENCE &amp; <span className="text-accent">RESEARCH HUB</span>
-            </h2>
-            <p className="font-serif italic text-lg text-foreground/80 max-w-md">
-              Direct access to conference talks, peer-reviewed papers, field reports, and threat
-              dossiers.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {hubs.map((h) => (
-            <Link
-              key={h.to}
-              to={h.to as "/def-con-brief"}
-              onClick={() => pushNavSection("briefing-hub")}
-              className="border-2 border-rule bg-card hover:border-accent hover:shadow-comic-accent p-6 flex flex-col justify-between transition-all group min-h-[220px]"
-            >
-              <div className="space-y-3">
-                <div className="flex justify-between items-start mono-label text-[10px]">
-                  <span className="text-accent font-bold px-2 py-0.5 border border-accent/40 bg-accent/10">
-                    {h.badge}
-                  </span>
-                  <span className="text-foreground/50">{h.sub}</span>
-                </div>
-                <h3 className="display text-3xl group-hover:text-accent transition-colors leading-none mt-2">
-                  {h.title}
-                </h3>
-                <p className="font-serif italic text-base text-foreground/80 leading-snug">
-                  {h.desc}
-                </p>
-              </div>
-              <div className="pt-4 border-t border-rule/50 flex justify-between items-center mono-label text-xs group-hover:text-accent font-bold">
-                <span>EXPLORE BRIEFING</span>
-                <span>→</span>
-              </div>
-            </Link>
-          ))}
         </div>
       </div>
     </section>
@@ -424,7 +356,7 @@ function AttackSurface() {
         <div className="flex flex-wrap items-end justify-between gap-8 border-b-2 border-ink pb-8">
           <div>
             <p ref={scrambleRef} className="mono-label text-ink/60!">
-              SECTION 03 — ATTACK SURFACE DOSSIER
+              SECTION 02 — ATTACK SURFACE DOSSIER
             </p>
             <h2 className="display text-6xl md:text-8xl lg:text-[140px] mt-4">
               Watch{" "}
@@ -539,7 +471,7 @@ function Spread() {
         <div className="col-span-12 lg:col-span-5 bg-paper text-ink p-10 lg:p-16 flex flex-col justify-between gap-12">
           <div>
             <p ref={scrambleRef} className="mono-label !text-ink/60">
-              SECTION 05 — EVERY CABLE, EVERY RELAY.
+              SECTION 04 — EVERY CABLE, EVERY RELAY.
             </p>
             <h3 className="display text-5xl md:text-7xl leading-[0.9] mt-3">
               Every cable.
@@ -609,7 +541,7 @@ function Replay() {
         <div className="grid grid-cols-12 gap-8 mb-16">
           <div className="col-span-12 md:col-span-4 mono-label">
             <p ref={scrambleRef} className="text-foreground/60">
-              SECTION 06 — TIMELINE & EXERCISE &ldquo;HOLLOW&rdquo;
+              SECTION 05 — TIMELINE & EXERCISE &ldquo;HOLLOW&rdquo;
             </p>
           </div>
           <div className="col-span-12 md:col-span-8">
@@ -729,7 +661,7 @@ function Dossier() {
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-36">
         <div className="grid grid-cols-12 gap-8 border-b border-rule pb-10">
           <p ref={scrambleRef} className="col-span-12 md:col-span-3 mono-label">
-            SECTION 07 — CAPABILITY
+            SECTION 06 — CAPABILITY
           </p>
           <h3 className="col-span-12 md:col-span-9 display text-5xl md:text-7xl lg:text-[100px] leading-[0.88]">
             Four instruments.
@@ -768,7 +700,7 @@ function Closing() {
       <div className="absolute inset-0 grid-bg opacity-30" />
       <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 py-32 lg:py-48">
         <p ref={scrambleRef} className="mono-label">
-          SECTION 08 — INVITATION
+          SECTION 07 — INVITATION
         </p>
         <h2 className="display text-[18vw] md:text-[14vw] lg:text-[220px] leading-[0.82] mt-6">
           REHEARSE
@@ -849,7 +781,7 @@ function MindhunterShowcase() {
         {/* Section Header matching Section 01 / 02 */}
         <div className="grid grid-cols-12 gap-8 border-b border-rule pb-10">
           <div className="col-span-12 md:col-span-3 mono-label space-y-2">
-            <p>SECTION 04</p>
+            <p>SECTION 03</p>
             <p ref={scrambleRef} className="text-accent">
               — THREAT PSYCHOLOGY
             </p>
@@ -996,14 +928,6 @@ function Index() {
           style={{ backgroundColor: "var(--color-background)" }}
         >
           <Manifesto />
-        </FlowSection>
-
-        <FlowSection
-          id="briefings"
-          aria-label="Intelligence & Research Hub"
-          style={{ backgroundColor: "var(--color-background)" }}
-        >
-          <BriefingHub />
         </FlowSection>
 
         <FlowSection

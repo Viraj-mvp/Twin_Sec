@@ -103,7 +103,8 @@ export const CommandExplanationModal: React.FC<CommandExplanationModalProps> = (
         <div>
           <p className="mono-label text-foreground/60 mb-2">DEFENSIVE DETECTION OPPORTUNITIES</p>
           <div className="bg-amber-950/20 p-4 border border-amber-500/40 font-mono text-xs text-amber-300">
-            🛡️ {commandExp.detectionOpportunities}
+            <span className="font-bold text-accent mr-1">[DEFENSE OPPORTUNITY]:</span>{" "}
+            {commandExp.detectionOpportunities}
           </div>
         </div>
 

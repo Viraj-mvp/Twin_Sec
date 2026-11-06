@@ -1,7 +1,35 @@
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getRequestHeader, setResponseHeader } from "@tanstack/react-start/server";
 import { db, schema } from "./db";
 import { eq, and, gt, lt } from "drizzle-orm";
+
+const SESSION_SECRET = process.env.SESSION_SECRET || "twinsec-cyber-range-default-hmac-key-2026";
+
+function signSessionToken(token: string): string {
+  const hmac = crypto.createHmac("sha256", SESSION_SECRET).update(token).digest("base64url");
+  return `${token}.${hmac}`;
+}
+
+function verifyAndExtractToken(rawCookie: string): string | undefined {
+  const dotIdx = rawCookie.lastIndexOf(".");
+  if (dotIdx === -1) {
+    // Backward-compatibility fallback for unsigned legacy tokens
+    return rawCookie;
+  }
+  const token = rawCookie.slice(0, dotIdx);
+  const signature = rawCookie.slice(dotIdx + 1);
+  const expectedSig = crypto.createHmac("sha256", SESSION_SECRET).update(token).digest("base64url");
+
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return token;
+  }
+
+  // Untrusted or tampered cookie
+  return undefined;
+}
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 12); // bcrypt work factor 12 for production
@@ -28,13 +56,22 @@ export async function getSessionOperator(token: string | undefined) {
   if (!token) return null;
   const now = new Date().toISOString();
   const [row] = await db
-    .select({ operator: schema.operators })
+    .select({
+      id: schema.operators.id,
+      callsign: schema.operators.callsign,
+      email: schema.operators.email,
+      badgeId: schema.operators.badgeId,
+      clearance: schema.operators.clearance,
+      role: schema.operators.role,
+      preferencesJson: schema.operators.preferencesJson,
+      createdAt: schema.operators.createdAt,
+    })
     .from(schema.sessions)
     .innerJoin(schema.operators, eq(schema.sessions.operatorId, schema.operators.id))
     .where(and(eq(schema.sessions.token, token), gt(schema.sessions.expiresAt, now)))
     .limit(1);
 
-  return row?.operator ?? null;
+  return row ?? null;
 }
 
 export async function deleteSession(token: string) {
@@ -80,7 +117,9 @@ function serializeCookie(
 export function isSecureCookie(): boolean {
   if (process.env.COOKIE_SECURE === "true") return true;
   if (process.env.COOKIE_SECURE === "false") return false;
-  return process.env.NODE_ENV === "production" || process.env.HTTPS === "true";
+  // Authoritative production security: always set Secure in production
+  if (process.env.NODE_ENV === "production") return true;
+  return process.env.HTTPS === "true";
 }
 
 export function getSameSiteOption(): "lax" | "strict" {
@@ -91,9 +130,10 @@ export function setSessionCookie(token: string) {
   try {
     const secure = isSecureCookie();
     const sameSite = getSameSiteOption();
+    const signed = signSessionToken(token);
     setResponseHeader(
       "Set-Cookie",
-      serializeCookie(COOKIE_NAME, token, {
+      serializeCookie(COOKIE_NAME, signed, {
         httpOnly: true,
         secure,
         sameSite,
@@ -118,7 +158,9 @@ export function getSessionCookie(): string | undefined {
       const v = pair.slice(idx + 1).trim();
       cookies[k] = decodeURIComponent(v);
     }
-    return cookies[COOKIE_NAME];
+    const raw = cookies[COOKIE_NAME];
+    if (!raw) return undefined;
+    return verifyAndExtractToken(raw);
   } catch {
     return undefined;
   }

@@ -27,7 +27,11 @@ export type AttackEventType =
   | "node.compromised"
   | "node.isolated"
   | "node.patched"
-  | "node.recovered";
+  | "node.recovered"
+  | "twin.state"
+  | "twin.detection"
+  | "twin.incident"
+  | "twin.recovery";
 
 export interface AttackEvent<T = unknown> {
   id: string;
@@ -128,3 +132,4 @@ class EventBus {
 }
 
 export const attackEventBus = new EventBus();
+export const eventBus = attackEventBus;

@@ -1,7 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
+import faqHero from "@/assets/faq-hero.jpg";
+import faqSubstation from "@/assets/faq-substation.jpg";
 
 export const Route = createFileRoute("/faq")({
   head: () => ({
@@ -31,26 +34,55 @@ function AccordionItem({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    if (open) {
+      gsap.fromTo(
+        contentRef.current,
+        { height: 0, opacity: 0 },
+        { height: "auto", opacity: 1, duration: 0.35, ease: "power2.out" },
+      );
+    } else {
+      gsap.to(contentRef.current, {
+        height: 0,
+        opacity: 0,
+        duration: 0.25,
+        ease: "power2.in",
+      });
+    }
+  }, [open]);
+
   return (
-    <div className="border-b border-rule group">
+    <div
+      className={`border-b border-rule group transition-colors duration-200 ${open ? "bg-card/25" : ""}`}
+    >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-start justify-between gap-4 py-5 text-left hover:text-accent transition-colors"
+        className="w-full flex items-start justify-between gap-4 py-5 px-1 sm:px-2 text-left hover:text-accent transition-colors cursor-pointer select-none"
         aria-expanded={open}
       >
         <span className="font-mono text-sm sm:text-base font-bold tracking-wide text-foreground group-hover:text-accent transition-colors">
           {question}
         </span>
         <span
-          className={`mono-label text-accent text-lg flex-shrink-0 transition-transform duration-300 ${open ? "rotate-45" : ""}`}
+          className={`mono-label text-accent text-lg flex-shrink-0 transition-transform duration-300 ${
+            open ? "rotate-45" : ""
+          }`}
         >
           +
         </span>
       </button>
       <div
-        className={`overflow-hidden transition-all duration-300 ${open ? "max-h-[2000px] opacity-100 pb-6" : "max-h-0 opacity-0"}`}
+        ref={contentRef}
+        style={{
+          height: defaultOpen ? "auto" : 0,
+          overflow: "hidden",
+          opacity: defaultOpen ? 1 : 0,
+        }}
       >
-        <div className="font-serif text-base sm:text-lg text-foreground/80 leading-relaxed space-y-4 pl-0 md:pl-4">
+        <div className="font-serif text-base sm:text-lg text-foreground/80 leading-relaxed space-y-4 px-1 sm:px-2 pb-6">
           {children}
         </div>
       </div>
@@ -133,7 +165,18 @@ function FAQPage() {
       {/* ── HERO ── */}
       <section className="border-b border-rule relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />
-        <div className="absolute inset-0 scanline pointer-events-none opacity-50" />
+        <div className="absolute inset-0">
+          <img
+            src={faqHero}
+            alt="Cyber-physical SCADA operations center"
+            width={1920}
+            height={1080}
+            fetchPriority="high"
+            className="h-full w-full object-cover opacity-30"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+          <div className="absolute inset-0 scanline pointer-events-none opacity-60" />
+        </div>
         <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 py-20 lg:py-32">
           <div className="flex items-center justify-between mono-label mb-8" data-reveal>
             <div className="flex items-center gap-3">
@@ -496,7 +539,18 @@ function FAQPage() {
 
       {/* ── USP DIFFERENTIATION ── */}
       <section className="border-t border-rule bg-black/50 relative overflow-hidden">
-        <div className="absolute inset-0 grid-bg opacity-20" />
+        <div className="absolute inset-0">
+          <img
+            src={faqSubstation}
+            alt="Critical infrastructure substation grid"
+            width={1920}
+            height={1080}
+            className="h-full w-full object-cover opacity-20"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/60" />
+          <div className="absolute inset-0 scanline pointer-events-none opacity-40" />
+        </div>
+        <div className="absolute inset-0 grid-bg opacity-20 pointer-events-none" />
         <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 py-20 lg:py-32">
           <div className="mono-label mb-4 text-accent" data-reveal>
             PART B · COMPETITIVE DIFFERENTIATION
@@ -515,9 +569,9 @@ function FAQPage() {
               <div className="border border-rule p-6 h-full">
                 <span className="mono-label text-danger">TOO CHEAP BUT SHALLOW</span>
                 <p className="font-serif italic text-base text-foreground/70 mt-4 leading-relaxed">
-                  TryHackMe, Hack The Box, SANS NetWars — IT security platforms. They don't simulate
-                  Modbus, DNP3, or BACnet. They don't model physical consequences. They don't touch
-                  MITRE ATT&CK for ICS.
+                  TryHackMe, HTB (HackTheBox), SANS NetWars — IT security platforms. They don't
+                  simulate Modbus, DNP3, or BACnet. They don't model physical consequences. They
+                  don't touch MITRE ATT&CK for ICS.
                 </p>
               </div>
             </div>

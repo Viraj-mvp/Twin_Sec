@@ -268,7 +268,7 @@ function TwinEngine() {
             className="flex flex-wrap items-baseline justify-between gap-6 mono-label"
             data-reveal
           >
-            <span>TWIN ENGINE · v1.0 · BUILD 2026.06.11</span>
+            <span>TWIN ENGINE · v1.0.0 · BUILD 2026.06.11</span>
             <span className="text-accent">7 FACILITIES · 32 PROTOCOLS · LIVE</span>
             <div className="flex gap-4">
               <Link

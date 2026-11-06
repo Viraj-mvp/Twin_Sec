@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { getCaseFile } from "@/data/case-files";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
 import { CaseFileDetail as CaseFileDetailComponent } from "@/components/casefile/CaseFileDetail";
 
 export const Route = createFileRoute("/case-files/$id")({

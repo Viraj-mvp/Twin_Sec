@@ -3,15 +3,36 @@ import { z } from "zod";
 import { db } from "../db/db";
 import { trainingRuns, auditLogs } from "../db/schema";
 import { eq } from "drizzle-orm";
+import { getAuthOperatorId } from "../server-helpers.server";
 
 const ExportSIEMInput = z.object({
   trainingRunId: z.string(),
   format: z.enum(["CEF", "SYSLOG", "JSON"]).default("CEF"),
 });
 
+function escapeCefHeader(str: string): string {
+  return str.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+}
+
+function escapeCefExtension(str: string): string {
+  return str
+    .replace(/\\/g, "\\\\")
+    .replace(/=/g, "\\=")
+    .replace(/[\r\n]+/g, " ");
+}
+
+function escapeSyslogMessage(str: string): string {
+  return str.replace(/[\r\n]+/g, " ");
+}
+
 export const exportSIEMLog = createServerFn({ method: "POST" })
   .validator(ExportSIEMInput)
   .handler(async ({ data }) => {
+    const operatorId = await getAuthOperatorId();
+    if (!operatorId) {
+      throw new Error("Operator authentication required to export SIEM detection logs.");
+    }
+
     const run = await db.query.trainingRuns.findFirst({
       where: eq(trainingRuns.id, data.trainingRunId),
     });
@@ -20,8 +41,15 @@ export const exportSIEMLog = createServerFn({ method: "POST" })
       throw new Error(`Training run ${data.trainingRunId} not found.`);
     }
 
+    if (run.operatorId && run.operatorId !== operatorId) {
+      throw new Error(
+        "Unauthorized: You do not have clearance to export telemetry for this training run.",
+      );
+    }
+
     const logs = await db.query.auditLogs.findMany({
       where: eq(auditLogs.trainingRunId, data.trainingRunId),
+      limit: 1000,
     });
 
     if (data.format === "JSON") {
@@ -40,16 +68,18 @@ export const exportSIEMLog = createServerFn({ method: "POST" })
       };
     }
 
-    // CEF Lines mapping
+    // CEF Lines mapping with RFC-compliant escaping
     const cefLines = logs.map((l, index) => {
       const severityNum = l.severity === "error" ? 8 : l.severity === "warn" ? 4 : 2;
-      const details = l.details.replace(/\|/g, "\\|");
-      return `CEF:0|TwinSec|CyberRange|3.1|${index + 1000}|${l.eventType}|${severityNum}|rt=${l.timestamp} src=203.0.113.10 dst=203.0.113.50 suser=OPERATOR msg=${details}`;
+      const eventTypeSafe = escapeCefHeader(l.eventType);
+      const detailsSafe = escapeCefExtension(l.details || "");
+      return `CEF:0|TwinSec|CyberRange|3.1|${index + 1000}|${eventTypeSafe}|${severityNum}|rt=${l.timestamp} src=203.0.113.10 dst=203.0.113.50 suser=OPERATOR msg=${detailsSafe}`;
     });
 
     if (data.format === "SYSLOG") {
       const syslogLines = logs.map(
-        (l) => `<14>1 ${l.timestamp} twinsec-range CyberRange 1234 ${l.eventType} - ${l.details}`,
+        (l) =>
+          `<14>1 ${l.timestamp} twinsec-range CyberRange 1234 ${l.eventType} - ${escapeSyslogMessage(l.details || "")}`,
       );
       return { text: syslogLines.join("\n") };
     }
@@ -64,6 +94,7 @@ const ExportDebriefPDFInput = z.object({
 export const exportDebriefPDF = createServerFn({ method: "POST" })
   .validator(ExportDebriefPDFInput)
   .handler(async ({ data }) => {
+    const operatorId = await getAuthOperatorId();
     const run = await db.query.trainingRuns.findFirst({
       where: eq(trainingRuns.id, data.trainingRunId),
     });
@@ -72,8 +103,13 @@ export const exportDebriefPDF = createServerFn({ method: "POST" })
       throw new Error("Run not found.");
     }
 
+    if (run.operatorId && run.operatorId !== operatorId) {
+      throw new Error("Unauthorized: Access to this classified debrief is restricted.");
+    }
+
     const logs = await db.query.auditLogs.findMany({
       where: eq(auditLogs.trainingRunId, data.trainingRunId),
+      limit: 1000,
     });
 
     return {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { SectorId } from "@/data/scenarios";
 import { generatePhaseGuidance } from "@/lib/api/role-briefing.functions";
+import DOMPurify from "dompurify";
 import type {
   GuidancePhase,
   OperationalRole,
@@ -81,7 +82,21 @@ export const PhaseGuidancePanel: React.FC<PhaseGuidancePanelProps> = ({
             lastDecisionId,
           },
         });
-        if (!cancelled) setGuidance(res.guidance);
+        if (!cancelled && res.guidance) {
+          const safeGuidance = {
+            ...res.guidance,
+            purpose: DOMPurify.sanitize(res.guidance.purpose),
+            progressHint: DOMPurify.sanitize(res.guidance.progressHint),
+            nextPhaseTrigger: DOMPurify.sanitize(res.guidance.nextPhaseTrigger),
+            commonActivities: (res.guidance.commonActivities || []).map((a: string) =>
+              DOMPurify.sanitize(a),
+            ),
+            checkYourUnderstanding: (res.guidance.checkYourUnderstanding || []).map((q: string) =>
+              DOMPurify.sanitize(q),
+            ),
+          };
+          setGuidance(safeGuidance);
+        }
       } catch {
         if (!cancelled) setGuidance(null);
       } finally {
@@ -224,7 +239,7 @@ export const PhaseGuidancePanel: React.FC<PhaseGuidancePanelProps> = ({
                 <div className="text-[11.5px] font-bold leading-relaxed">{d.questionPreview}</div>
                 {(role === "RED" ? d.redPitfall : d.bluePitfall) && (
                   <div className="text-[10.5px] text-amber-400/90 bg-black/30 p-1.5 border-l-2 border-amber-500/70 leading-snug">
-                    <span className="font-bold mr-1">⚠ PITFALL:</span>
+                    <span className="font-bold mr-1">[CAUTION]:</span>
                     {role === "RED" ? d.redPitfall : d.bluePitfall}
                   </div>
                 )}

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({

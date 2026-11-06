@@ -1,18 +1,72 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import facility from "@/assets/facility.jpg";
-import schematic from "@/assets/schematic.jpg";
+import { getSectorSchematic } from "@/data/schematics";
 import { KaliTerminal, TerminalFAB } from "@/components/simulation/KaliTerminal";
 import { Topology2D } from "@/components/simulation/Topology2D";
-import { ExplainableAIPanel } from "@/components/simulation/ExplainableAIPanel";
-import { AttackAnatomyPanel } from "@/components/simulation/AttackAnatomyPanel";
-import { SigmaRuleExport } from "@/components/simulation/SigmaRuleExport";
-import { PacketInspector } from "@/components/simulation/PacketInspector";
-import { PhaseGuidancePanel } from "@/components/simulation/PhaseGuidancePanel";
-import { CVEIntelPanel } from "@/components/simulation/CVEIntelPanel";
+import { BlastRadiusHUD } from "@/components/simulation/BlastRadiusHUD";
+import { AssetDossierTab } from "@/components/simulation/AssetDossierTab";
+import { computeBlastRadius, type BlastRadiusResult } from "@/lib/simulation/blast-radius";
+import { resolveSectorNode, translateSectorCommand } from "@/lib/simulation/sector-aliases";
 import { MissionBriefing } from "@/components/simulation/MissionBriefing";
-import { SimulationAuthGate } from "@/components/SimulationAuthGate";
+import { log } from "@/lib/logger";
+
+const ExplainableAIPanel = lazy(() =>
+  import("@/components/simulation/ExplainableAIPanel").then((m) => ({
+    default: m.ExplainableAIPanel,
+  })),
+);
+const AttackAnatomyPanel = lazy(() =>
+  import("@/components/simulation/AttackAnatomyPanel").then((m) => ({
+    default: m.AttackAnatomyPanel,
+  })),
+);
+const SigmaRuleExport = lazy(() =>
+  import("@/components/simulation/SigmaRuleExport").then((m) => ({ default: m.SigmaRuleExport })),
+);
+const PacketInspector = lazy(() =>
+  import("@/components/simulation/PacketInspector").then((m) => ({ default: m.PacketInspector })),
+);
+const PhaseGuidancePanel = lazy(() =>
+  import("@/components/simulation/PhaseGuidancePanel").then((m) => ({
+    default: m.PhaseGuidancePanel,
+  })),
+);
+const CVEIntelPanel = lazy(() =>
+  import("@/components/simulation/CVEIntelPanel").then((m) => ({ default: m.CVEIntelPanel })),
+);
+const HaiReplayPanel = lazy(() =>
+  import("@/components/simulation/HaiReplayPanel").then((m) => ({ default: m.HaiReplayPanel })),
+);
+const MitreIcsExplorerPanel = lazy(() =>
+  import("@/components/simulation/MitreIcsExplorerPanel").then((m) => ({
+    default: m.MitreIcsExplorerPanel,
+  })),
+);
+const OtcadBrowserPanel = lazy(() =>
+  import("@/components/simulation/OtcadBrowserPanel").then((m) => ({
+    default: m.OtcadBrowserPanel,
+  })),
+);
+
+function SimPanelFallback({ label }: { label: string }) {
+  return (
+    <div className="w-full min-h-[300px] border-2 border-rule bg-card flex flex-col items-center justify-center p-8 font-mono shadow-comic space-y-3">
+      <div className="flex items-center gap-2 text-accent">
+        <span className="size-2.5 bg-accent animate-ping" />
+        <span className="text-xs font-bold uppercase tracking-wider">
+          LOADING SUBSYSTEM: [{label}]
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground uppercase tracking-widest">
+        INITIALIZING PURDUE RANGE COMPONENT
+      </p>
+    </div>
+  );
+}
+import { SimulationAuthGate } from "@/components/auth/SimulationAuthGate";
 import { useOperator } from "@/contexts/OperatorContext";
+import { usePreferences } from "@/lib/auth-store";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
 import { getAttackScenario } from "@/simulation/scenarios";
 import { EXERCISES, getScenarioData, type SectorId } from "@/data/scenarios";
@@ -27,6 +81,18 @@ import {
   type SimulationGraphState,
   type EnrichedEvent,
 } from "@/lib/simulation-graph";
+import { saveTrainingRun } from "@/lib/api/training.functions";
+import { applyTwinCommandFn, startTwinSimulationFn } from "@/lib/api/simulation.functions";
+import { saveGuestRun, canGuestDownloadPdf, recordGuestPdfDownload } from "@/lib/guest-store";
+import { FileSpreadsheet, FileDown, Trophy, Shield } from "lucide-react";
+import { generateSigmaRule, downloadSigmaRuleYml } from "@/lib/sigma-generator";
+import {
+  playAirGapRelaySound,
+  playRadarPingSound,
+  playTerminalKeySound,
+  playBreakerTripAlert,
+} from "@/lib/sound-engine";
+import { getHistoricalAttackById } from "@/data/historical-attacks";
 
 const SECTOR_IDS = [
   "power",
@@ -39,13 +105,13 @@ const SECTOR_IDS = [
 ] as const;
 
 export const Route = createFileRoute("/simulation")({
-  validateSearch: (s: Record<string, unknown>) => {
-    const sector =
+  validateSearch: (s: Record<string, unknown>): Partial<{ sector: SectorId; attack: string }> => ({
+    sector:
       typeof s.sector === "string" && (SECTOR_IDS as readonly string[]).includes(s.sector)
         ? (s.sector as SectorId)
-        : undefined;
-    return { sector };
-  },
+        : undefined,
+    attack: typeof s.attack === "string" ? s.attack : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Simulation — TwinSec · Live Exercise" },
@@ -85,7 +151,7 @@ type Node = {
 
 type Edge = { from: string; to: string };
 
-let NODES: Node[] = [
+const NODES: Node[] = [
   {
     id: "ews-04",
     label: "EWS-04",
@@ -196,7 +262,7 @@ let NODES: Node[] = [
   },
 ];
 
-let EDGES: Edge[] = [
+const EDGES: Edge[] = [
   { from: "ews-04", to: "hist" },
   { from: "ews-04", to: "hmi-11" },
   { from: "hist", to: "switch-a" },
@@ -218,10 +284,11 @@ type Event = {
   title: string;
   desc: string;
   sev: Severity;
+  mitreId?: string;
 };
 
 // Default (power/HOLLOW) scenario — mutable so per-sector scenarios can swap in.
-let EVENTS: Event[] = [
+const EVENTS: Event[] = [
   {
     t: 0,
     tag: "INITIAL ACCESS",
@@ -229,6 +296,7 @@ let EVENTS: Event[] = [
     title: "Spear-phish accepted",
     desc: "Macro payload runs on engineering workstation EWS-04. Beacon established to attacker C2.",
     sev: "MEDIUM",
+    mitreId: "T0817",
   },
   {
     t: 862,
@@ -237,6 +305,7 @@ let EVENTS: Event[] = [
     title: "Historian fingerprinted",
     desc: "OSIsoft PI node enumerated. 14 protocol anomalies on Modbus/TCP.",
     sev: "HIGH",
+    mitreId: "T0846",
   },
   {
     t: 1244,
@@ -245,6 +314,7 @@ let EVENTS: Event[] = [
     title: "HMI credential replay",
     desc: "Cached operator credentials reused. Unsegmented OT VLAN crossed in 6 seconds.",
     sev: "HIGH",
+    mitreId: "T0886",
   },
   {
     t: 3731,
@@ -253,6 +323,7 @@ let EVENTS: Event[] = [
     title: "Project file checked out",
     desc: "Engineering software opened. Project file staged for modification.",
     sev: "MEDIUM",
+    mitreId: "T0877",
   },
   {
     t: 6489,
@@ -261,6 +332,7 @@ let EVENTS: Event[] = [
     title: "Ladder logic overwritten",
     desc: "Rungs 14–16 silently rewritten. Checksum spoofed. Operator does not know.",
     sev: "CRITICAL",
+    mitreId: "T1692.001",
   },
   {
     t: 7820,
@@ -269,6 +341,7 @@ let EVENTS: Event[] = [
     title: "Setpoint drift initiated",
     desc: "Speed setpoint walked +0.3 Hz/s. Within tolerance band — invisible to alarm system.",
     sev: "CRITICAL",
+    mitreId: "T0831",
   },
   {
     t: 9120,
@@ -277,6 +350,7 @@ let EVENTS: Event[] = [
     title: "Safety interlock bypassed",
     desc: "Safety logic solver re-tasked. Trip thresholds disarmed.",
     sev: "CRITICAL",
+    mitreId: "T0837",
   },
   {
     t: 9520,
@@ -285,6 +359,7 @@ let EVENTS: Event[] = [
     title: "Resonance band entered",
     desc: "Bearing temperature +84°C. Vibration crossed mechanical envelope.",
     sev: "CRITICAL",
+    mitreId: "T0828",
   },
   {
     t: 9541,
@@ -293,10 +368,11 @@ let EVENTS: Event[] = [
     title: "Breaker 33-B latched",
     desc: "Cascading isolation. 14 MW load shed. Downstream pressure loss in feeder loop.",
     sev: "CRITICAL",
+    mitreId: "T0879",
   },
 ];
 
-let TOTAL = EVENTS[EVENTS.length - 1].t + 60;
+const TOTAL = EVENTS[EVENTS.length - 1].t + 60;
 
 /* ------------------------------------------------------------------ */
 /*  DECISION BRANCHING                                                */
@@ -313,7 +389,7 @@ type Decision = {
   options: { id: ChoiceId; label: string; consequence: string }[];
 };
 
-let DECISIONS: Decision[] = [
+const DECISIONS: Decision[] = [
   {
     id: "d1",
     t: 1244,
@@ -1470,26 +1546,124 @@ const SCENARIOS: Record<SectorId, Scenario> = {
   },
 };
 
-function applyScenario(sector: SectorId) {
-  // Reset to defaults first so switching sectors is idempotent.
-  NODES = DEFAULT_NODES.map((n) => ({ ...n }));
-  EVENTS = DEFAULT_EVENTS.map((e) => ({ ...e }));
-  EDGES = DEFAULT_EDGES.map((e) => ({ ...e }));
-  DECISIONS = DEFAULT_DECISIONS.map((d) => ({
+function getScenarioAssets(sector: SectorId, attackId?: string) {
+  let nodes = DEFAULT_NODES.map((n) => ({ ...n }));
+  let events = DEFAULT_EVENTS.map((e) => ({ ...e }));
+  const edges = DEFAULT_EDGES.map((e) => ({ ...e }));
+  let decisions = DEFAULT_DECISIONS.map((d) => ({
     ...d,
     options: d.options.map((o) => ({ ...o })),
   }));
   const s = SCENARIOS[sector];
-  if (s?.events?.length) EVENTS = s.events.map((e) => ({ ...e }));
+  if (s?.events?.length) events = s.events.map((e) => ({ ...e }));
   if (s?.decisions?.length)
-    DECISIONS = s.decisions.map((d) => ({ ...d, options: d.options.map((o) => ({ ...o })) }));
+    decisions = s.decisions.map((d) => ({ ...d, options: d.options.map((o) => ({ ...o })) }));
   if (s?.nodeOverrides) {
-    NODES = NODES.map((n) => {
+    nodes = nodes.map((n) => {
       const o = s.nodeOverrides[n.id];
       return o ? { ...n, ...o } : n;
     });
   }
-  TOTAL = EVENTS[EVENTS.length - 1].t + 60;
+
+  // Check for specific historical incident overrides
+  const historical = attackId ? getHistoricalAttackById(sector, attackId) : undefined;
+  if (historical) {
+    if (sector === "power") {
+      nodes = nodes.map((n) => {
+        if (n.id === "plc-3")
+          return {
+            ...n,
+            label: "RTU-330",
+            kind: "Substation RTU",
+            vendor: "ABB RTU560 Gateway",
+            exposure: "OT/L2",
+            affects: ["Pivnichna 330kV bus", "Breaker telecontrol"],
+          };
+        if (n.id === "plc-7")
+          return {
+            ...n,
+            label: "SIPROTEC-9",
+            kind: "Protective Relay",
+            vendor: "SIEMENS SIPROTEC 4",
+            exposure: "OT/L1",
+            affects: ["Overcurrent trip", "Busbar diff protection"],
+          };
+        if (n.id === "sis")
+          return {
+            ...n,
+            label: "RLY-DIST",
+            kind: "Distance Protection",
+            vendor: "SEL-421 IED",
+            exposure: "OT/L1",
+            affects: ["Zone 1 trip", "Feeder cutoff"],
+          };
+        if (n.id === "brk")
+          return {
+            ...n,
+            label: "BRK-330",
+            kind: "SF6 Circuit Breaker",
+            vendor: "ABB 330kV Interrupter",
+            exposure: "PHYSICAL/L0",
+            affects: ["200 MW transmission", "Kyiv grid ring"],
+          };
+        return n;
+      });
+    } else if (sector === "water") {
+      nodes = nodes.map((n) => {
+        if (n.id === "plc-3")
+          return {
+            ...n,
+            label: "PLC-DOSE",
+            kind: "Water Treatment PLC",
+            vendor: "ALLEN-BRADLEY CompactLogix",
+            exposure: "OT/L1",
+            affects: ["Sodium hydroxide pump", "pH feedback loop"],
+          };
+        if (n.id === "plc-7")
+          return {
+            ...n,
+            label: "PLC-PUMP",
+            kind: "Booster Controller",
+            vendor: "SCHNEIDER Modicon M580",
+            exposure: "OT/L1",
+            affects: ["Effluent manifold", "Distribution pressure"],
+          };
+        if (n.id === "cent")
+          return {
+            ...n,
+            label: "PUMP-NAOH",
+            kind: "Chemical Dosing Pump",
+            vendor: "GRUNDFOS DDA Lye Metering",
+            exposure: "PHYSICAL/L0",
+            affects: ["Clearwell basin pH", "Potable water mains"],
+          };
+        if (n.id === "brk")
+          return {
+            ...n,
+            label: "VLV-EFFLUENT",
+            kind: "Distribution Valve",
+            vendor: "ROTORK Electric Actuator",
+            exposure: "PHYSICAL/L0",
+            affects: ["Municipal mains", "District flow"],
+          };
+        return n;
+      });
+    }
+
+    if (historical.events && historical.events.length > 0) {
+      events = historical.events.map((e) => ({ ...e }));
+    }
+    if (historical.decisions && historical.decisions.length > 0) {
+      decisions = historical.decisions.map((d) => ({
+        ...d,
+        options: d.options.map((o) => ({ ...o })),
+      }));
+    }
+  }
+
+  const lastEvent = events && events.length > 0 ? events[events.length - 1] : null;
+  const total = (lastEvent?.t ?? 900) + 60;
+  return { nodes, events, edges, decisions, total };
 }
 
 const sevColor = (s: Severity) =>
@@ -1630,43 +1804,96 @@ function getOffensiveKaliCommand(
 
 function SimulationPage() {
   const search = Route.useSearch();
-  const sector: SectorId = search.sector ?? "power";
-  useMemo(() => {
-    applyScenario(sector);
-  }, [sector]);
-  const exercise = EXERCISES[sector];
-  const currentScenario = useMemo(() => getAttackScenario(sector), [sector]);
+  const [prefs] = usePreferences();
+  const sector: SectorId =
+    search.sector && (SECTOR_IDS as readonly string[]).includes(search.sector)
+      ? (search.sector as SectorId)
+      : (prefs?.defaultSector as SectorId) || "power";
+  const activeHistoricalAttack = useMemo(
+    () => (search.attack ? getHistoricalAttackById(sector, search.attack) : undefined),
+    [sector, search.attack],
+  );
+  const {
+    nodes: NODES,
+    events: EVENTS,
+    edges: EDGES,
+    decisions: DECISIONS,
+    total: TOTAL,
+  } = useMemo(() => getScenarioAssets(sector, search.attack), [sector, search.attack]);
+
+  const [controllerOverrides, setControllerOverrides] = useState<
+    Record<string, { param: string; value: number }>
+  >({});
+  const exercise = EXERCISES[sector] || EXERCISES.power;
+  const baseScenario = useMemo(() => getAttackScenario(sector || "power"), [sector]);
+  const currentScenario = useMemo(() => {
+    if (!activeHistoricalAttack) return baseScenario;
+    return {
+      ...baseScenario,
+      name: activeHistoricalAttack.name,
+      byline: `${activeHistoricalAttack.code} · ${activeHistoricalAttack.threatActor}`,
+      description: activeHistoricalAttack.summary,
+      briefing: {
+        ...baseScenario.briefing,
+        overview: {
+          ...baseScenario.briefing.overview,
+          summary: activeHistoricalAttack.summary,
+          threatActor: activeHistoricalAttack.threatActor,
+        },
+        threatActor: activeHistoricalAttack.threatActor,
+        attackVector: activeHistoricalAttack.attackVector,
+        objectives: activeHistoricalAttack.tacticalObjectives,
+        tacticalTasks: activeHistoricalAttack.tacticalObjectives,
+        reconFindings: [
+          `Targeted Hardware: ${activeHistoricalAttack.targetedHardware.map((h) => `${h.category} (${h.model})`).join(", ")}`,
+          `Exploited Protocols: ${activeHistoricalAttack.exploitedProtocols.join(", ")}`,
+          `Physical Consequence: ${activeHistoricalAttack.physicsImpact.consequence}`,
+          `Baseline Ground Truth: ${activeHistoricalAttack.physicsImpact.baseline}`,
+        ],
+        commandExplanations: [
+          ...activeHistoricalAttack.terminalCommands.map((tc) => ({
+            command: tc.cmd.split(" ")[0],
+            purpose: tc.desc,
+            syntax: tc.cmd,
+            expectedOutput: "[+] Command dispatched to target asset.",
+            attackerIntent: "Execution of tailored industrial protocol message",
+            riskLevel: "HIGH" as const,
+            detectionOpportunities: "Deep Packet Inspection on OT communication boundary",
+            mitreTechnique: activeHistoricalAttack.mitreTtpList[0]?.id || "T0855",
+          })),
+          ...baseScenario.briefing.commandExplanations,
+        ],
+      },
+    };
+  }, [baseScenario, activeHistoricalAttack]);
   const revealRef = useGsapReveal<HTMLDivElement>();
 
   const { operator, loading: authLoading } = useOperator();
   const [authGateOpen, setAuthGateOpen] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && (!operator || !operator.loggedIn)) {
-      setAuthGateOpen(true);
-    }
-  }, [authLoading, operator]);
-
   const taskTarget1 = useMemo(
     () => sector && (NODES[3] || NODES[1] || NODES[0] || { id: "plc-3", label: "PLC-3" }),
-    [sector],
+    [sector, NODES],
   );
   const taskTarget2 = useMemo(
     () => sector && (NODES[4] || NODES[2] || NODES[0] || { id: "plc-7", label: "PLC-7" }),
-    [sector],
+    [sector, NODES],
   );
 
   const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(true);
-  const [targetSpeed, setTargetSpeed] = useState(60);
-  const easedSpeed = useRef(60);
-  const [displaySpeed, setDisplaySpeed] = useState(60);
+  const [playing, setPlaying] = useState(false);
+  const [targetSpeed, setTargetSpeed] = useState(15);
+  const [displaySpeed, setDisplaySpeed] = useState(15);
   const [selected, setSelected] = useState<string | null>(null);
-  const [intelTab, setIntelTab] = useState<"packets" | "guidance" | "cve" | "anatomy">("packets");
+  const [intelTab, setIntelTab] = useState<
+    "packets" | "guidance" | "cve" | "anatomy" | "hai" | "mitre" | "otcad"
+  >("hai");
   const [impactKey, setImpactKey] = useState(0);
   const [activeDecision, setActiveDecision] = useState<Decision | null>(null);
   const [showSigmaModal, setShowSigmaModal] = useState(false);
+  const [packetSubTab, setPacketSubTab] = useState<"hex" | "sigma">("hex");
+  const [copiedPacketSigma, setCopiedPacketSigma] = useState(false);
 
   // Cyber Range CLI Kali Terminal State
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -1674,6 +1901,29 @@ function SimulationPage() {
   const [terminalPos, setTerminalPos] = useState({ x: 24, y: 24 });
   const [isDragging, setIsDragging] = useState(false);
   const [isolatedNodes, setIsolatedNodes] = useState<Set<string>>(new Set());
+  const [previewAirGapNode, setPreviewAirGapNode] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const hoverTimeoutRef = useRef<number | null>(null);
+  const hoveredNode = useMemo(
+    () => NODES.find((n) => n.id === hoveredNodeId) || null,
+    [hoveredNodeId, NODES],
+  );
+
+  const handleHoverNode = useCallback((id: string | null) => {
+    if (hoverTimeoutRef.current) {
+      window.clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    if (id) {
+      setHoveredNodeId(id);
+    } else {
+      hoverTimeoutRef.current = window.setTimeout(() => {
+        setHoveredNodeId(null);
+      }, 300);
+    }
+  }, []);
+  const [autoPlayMode, setAutoPlayMode] = useState<boolean>(true);
+
   const [patchedNodes, setPatchedNodes] = useState<Set<string>>(new Set());
   const [firstActionTime, setFirstActionTime] = useState<number | null>(null);
   const [commandActiveNode, setCommandActiveNode] = useState<string | null>(null);
@@ -1768,6 +2018,7 @@ function SimulationPage() {
     setInteractions([]);
     setIsolatedNodes(new Set());
     setPatchedNodes(new Set());
+    setControllerOverrides({});
     setFirstActionTime(null);
     lastIdxRef.current = -1;
     streamedIdxRef.current = -1;
@@ -1780,6 +2031,7 @@ function SimulationPage() {
       `[*] Active Protocols: ${exercise.protocols}`,
       "[*] Type 'help' for CLI commands, 'attack' to deploy exploits, or 'isolate <node>' to quarantine.",
     ]);
+    startTwinSimulationFn({ data: { scenarioId: sector } }).catch(() => {});
   }, [sector, exercise]);
 
   // Hydrate from share-link hash on mount
@@ -1809,7 +2061,7 @@ function SimulationPage() {
     } catch {
       /* ignore malformed share link */
     }
-  }, []);
+  }, [EVENTS]);
 
   const handleSelectNode = useCallback(
     (id: string, source: "tap" | "long" = "tap") => {
@@ -1852,58 +2104,61 @@ function SimulationPage() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [t, triggerNodeTarget]);
+  }, [t, triggerNodeTarget, EVENTS]);
 
-  // Real-time Playback Loop: Auto-advance timeline clock when playing === true
+  // Real-time Playback Loop: Throttled to ~16 updates/sec for silky-smooth performance without React state churn
   useEffect(() => {
     if (!playing) return;
-    let lastFrame = performance.now();
+    let lastUpdate = performance.now();
     let raf = 0;
+    const THROTTLE_MS = 60; // 16 updates/sec max — eliminates CPU overload
+
     const loop = (now: number) => {
-      const dt = Math.min(0.1, (now - lastFrame) / 1000);
-      lastFrame = now;
-      setT((prev) => {
-        const speed = easedSpeed.current > 0 ? easedSpeed.current : 60;
-        const next = prev + dt * speed;
-        if (next >= TOTAL) {
-          setPlaying(false);
-          return TOTAL;
-        }
-        return next;
-      });
+      if (now - lastUpdate >= THROTTLE_MS) {
+        const elapsed = (now - lastUpdate) / 1000;
+        lastUpdate = now;
+        setT((prev) => {
+          const speed = targetSpeed > 0 ? targetSpeed : 15;
+          const next = prev + elapsed * speed;
+          if (next >= TOTAL) {
+            setPlaying(false);
+            return TOTAL;
+          }
+          return next;
+        });
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [playing]);
+  }, [playing, targetSpeed, TOTAL]);
 
-  // rAF loop for smooth speed display transitions
+  // Sync display speed immediately on user selection
   useEffect(() => {
-    let raf = 0;
-    const tick = (now: number) => {
-      if (lastTimeRef.current == null) lastTimeRef.current = now;
-      const dt = Math.min(0.1, (now - lastTimeRef.current) / 1000);
-      lastTimeRef.current = now;
-      const k = 1 - Math.exp(-dt * 4);
-      easedSpeed.current += (targetSpeed - easedSpeed.current) * k;
-
-      if (Math.abs(easedSpeed.current - targetSpeed) < 0.05) {
-        easedSpeed.current = targetSpeed;
-        setDisplaySpeed(targetSpeed);
-        return; // Stop animation loop once settled!
-      }
-
-      setDisplaySpeed(easedSpeed.current);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      lastTimeRef.current = null;
-    };
+    setDisplaySpeed(targetSpeed);
   }, [targetSpeed]);
 
-  const activeIdx = useMemo(() => EVENTS.reduce((acc, e, i) => (e.t <= t ? i : acc), -1), [t]);
+  const activeIdx = useMemo(
+    () => EVENTS.reduce((acc, e, i) => (e.t <= t ? i : acc), -1),
+    [t, EVENTS],
+  );
+
+  const activeEventObj = useMemo(() => {
+    if (activeIdx < 0 || !EVENTS[activeIdx]) return null;
+    const ev = EVENTS[activeIdx];
+    return {
+      eventId: `evt-${activeIdx}`,
+      timestamp: ev.t,
+      type: "TELEMETRY_ANOMALY" as const,
+      sourceAssetId: ev.node,
+      targetAssetId: ev.node,
+      severity:
+        ev.sev === "MEDIUM" ? ("WARN" as const) : (ev.sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
+      title: ev.title,
+      description: ev.desc,
+      data: {},
+    };
+  }, [activeIdx, EVENTS]);
 
   useEffect(() => {
     if (activeIdx !== lastIdxRef.current && activeIdx > -1) {
@@ -1911,16 +2166,26 @@ function SimulationPage() {
       lastIdxRef.current = activeIdx;
       if (crossed) {
         setImpactKey((k) => k + 1);
-        const ev = EVENTS[activeIdx];
-        const decision = DECISIONS.find((d) => d.t === ev.t);
-        if (decision && !promptedRef.current.has(decision.id) && !choices[decision.id]) {
-          promptedRef.current.add(decision.id);
-          setActiveDecision(decision);
-          setPlaying(false);
-        }
       }
     }
-  }, [activeIdx, choices]);
+
+    // Reset prompted status for future decisions if scrubbing backward
+    for (const d of DECISIONS) {
+      if (d.t > t && !choices[d.id]) {
+        promptedRef.current.delete(d.id);
+      }
+    }
+
+    // Decision catch-up check: Find any unprompted, unanswered decision at or before current time t
+    const pendingDecision = DECISIONS.find(
+      (d) => d.t <= t && !promptedRef.current.has(d.id) && !choices[d.id],
+    );
+    if (pendingDecision) {
+      promptedRef.current.add(pendingDecision.id);
+      setActiveDecision(pendingDecision);
+      setPlaying(false);
+    }
+  }, [activeIdx, t, choices, DECISIONS]);
 
   // Core Simulation Graph Evaluation Engine (Air-Gap Reachability, MTTD/MTTR, Physics, Cascade Containment)
   const graphState = useMemo<SimulationGraphState>(() => {
@@ -1936,8 +2201,22 @@ function SimulationPage() {
       firstActionTime,
       sector,
       totalTime: TOTAL,
+      controllerOverrides,
     });
-  }, [t, choices, isolatedNodes, patchedNodes, firstActionTime, sector]);
+  }, [
+    t,
+    choices,
+    isolatedNodes,
+    patchedNodes,
+    firstActionTime,
+    sector,
+    NODES,
+    EDGES,
+    EVENTS,
+    DECISIONS,
+    TOTAL,
+    controllerOverrides,
+  ]);
 
   const compromisedNodes = graphState.compromisedNodes;
   const blockedNodes = graphState.blockedNodes;
@@ -1945,6 +2224,20 @@ function SimulationPage() {
   const speedHz = graphState.physics.speedHz;
   const bearingC = graphState.physics.bearingC;
   const pressure = graphState.physics.pressure;
+
+  // Real-time pre-flight Air-Gap blast radius calculation
+  const blastRadiusResult = useMemo(() => {
+    if (!previewAirGapNode) return null;
+    return computeBlastRadius(
+      NODES,
+      EDGES,
+      previewAirGapNode,
+      compromisedNodes,
+      isolatedNodes,
+      (x, y) => ({ x: 70 + (x / 100) * 760, y: 55 + (y / 100) * 380 }),
+      34,
+    );
+  }, [previewAirGapNode, NODES, EDGES, compromisedNodes, isolatedNodes]);
 
   const outcome = useMemo(
     () => ({
@@ -1990,7 +2283,7 @@ function SimulationPage() {
       }
     }
     return null;
-  }, [activeIdx, isolatedNodes, blockedNodes]);
+  }, [activeIdx, isolatedNodes, blockedNodes, EVENTS]);
 
   const liveMetrics = useMemo(() => {
     return {
@@ -2082,9 +2375,25 @@ function SimulationPage() {
     blockedNodes,
     compromisedNodes,
     triggerNodeTarget,
+    EDGES,
+    EVENTS,
+    NODES,
   ]);
 
   const activeNode = selected ? (NODES.find((n) => n.id === selected) ?? null) : null;
+
+  const activeNodeBlastRadius = useMemo(() => {
+    if (!activeNode) return null;
+    return computeBlastRadius(
+      NODES,
+      EDGES,
+      activeNode.id,
+      compromisedNodes,
+      isolatedNodes,
+      (x, y) => ({ x: 70 + (x / 100) * 760, y: 55 + (y / 100) * 380 }),
+      34,
+    );
+  }, [activeNode, NODES, EDGES, compromisedNodes, isolatedNodes]);
 
   const restart = useCallback(() => {
     setT(0);
@@ -2111,11 +2420,14 @@ function SimulationPage() {
     }
   }, [sector, exercise]);
 
-  const handleTerminalSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const raw = terminalInput.trim();
+  const handleTerminalSubmit = (e?: React.FormEvent<HTMLFormElement>, overrideCmd?: string) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const raw = (overrideCmd ?? terminalInput).trim();
     if (!raw) return;
     setTerminalInput("");
+    playTerminalKeySound();
+
+    applyTwinCommandFn({ data: { command: raw } }).catch(() => {});
 
     const parts = raw.toLowerCase().split(/\s+/);
     const cmd = parts[0];
@@ -2143,11 +2455,35 @@ function SimulationPage() {
         "    play / pause         - Start or halt real-time simulation clock",
         "    ai-explain / ai      - Invoke Explainable AI Copilot for root cause & MITRE ATT&CK",
         "    sigma / siem         - Compile live telemetry to production YAML Sigma SIEM rule",
+        "    hai / replay         - Open HAI continuous telemetry replay & ground-truth ML lab",
+        "    mitre / stix         - Open MITRE ATT&CK for ICS STIX 2.1 matrix & technique explorer",
+        "    otcad / dossiers     - Open OTCAD historical cyberattack dossier repository",
         "    inject <sector>      - Switch threat campaign (power|water|oil-gas|manufacturing...)",
         "    export [json|csv|report] - Export run ledger data debrief dossier",
         "    status               - Query live physics telemetry (Hz, °C, bar), MTTD, MTTR & cost",
+        "    blast [node_id]      - Pre-flight evaluate air-gap blast radius & telemetry loss",
         "    clear                - Clear terminal console",
       );
+    } else if (translateSectorCommand(cmd, targetArg, sector, NODES)) {
+      const translation = translateSectorCommand(cmd, targetArg, sector, NODES)!;
+      newLogs.push(...translation.outputLogs);
+      if (translation.action === "isolate") {
+        setIsolatedNodes((prev) => new Set([...Array.from(prev), translation.targetNodeId]));
+        triggerNodeTarget(translation.targetNodeId, "isolate");
+        playAirGapRelaySound();
+        if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+        setShareToast(`[AIR-GAP ISOLATED]: ${translation.targetNodeLabel}`);
+      } else if (translation.action === "reconnect") {
+        setIsolatedNodes((prev) => {
+          const next = new Set(prev);
+          next.delete(translation.targetNodeId);
+          return next;
+        });
+        setShareToast(`[RECONNECTED]: ${translation.targetNodeLabel}`);
+      } else if (translation.action === "override") {
+        triggerNodeTarget(translation.targetNodeId, "override");
+        setShareToast(`[OVERRIDE SETPOINT]: ${translation.targetNodeLabel}`);
+      }
     } else if (cmd === "reset" || cmd === "restart" || cmd === "rewind") {
       restart();
       newLogs.push("[+] SIMULATION CLOCK REWOUND TO T+00:00:00. Baseline nominal state restored.");
@@ -2175,9 +2511,11 @@ function SimulationPage() {
     } else if (cmd === "attack" || cmd === "exploit" || cmd === "hack" || cmd === "connect") {
       let targetNode: Node | undefined;
       if (targetArg) {
-        targetNode = NODES.find(
-          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
-        );
+        targetNode =
+          resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+          );
       } else {
         targetNode =
           NODES.find((n) => !compromisedNodes.has(n.id) && !isolatedNodes.has(n.id)) || NODES[0];
@@ -2196,6 +2534,7 @@ function SimulationPage() {
           const ev = EVENTS.find((e) => e.node === targetNode.id);
           if (ev) {
             setT(ev.t);
+            playBreakerTripAlert();
             newLogs.push(
               `[+] EXPLOIT DEPLOYED: ${targetNode.id.toUpperCase()} (${targetNode.label}) [T+${fmt(ev.t)}]`,
               `    Attack Phase: ${ev.tag} · ${ev.title}`,
@@ -2203,6 +2542,7 @@ function SimulationPage() {
             );
           } else {
             setT((prev) => Math.min(TOTAL, prev + 800));
+            playBreakerTripAlert();
             newLogs.push(
               `[+] SUCCESS: Connection established to ${targetNode.id} (${targetNode.label}).`,
               `[*] Protocol: ${exercise.protocols} · Exploitation payload active.`,
@@ -2248,7 +2588,15 @@ function SimulationPage() {
         activeEvents: graphState.activeEvents,
       };
 
-      if (exportFmt === "csv") {
+      if (!operator?.loggedIn) {
+        newLogs.push(
+          "[-] ACCESS DENIED: File and data export is restricted to authenticated operators.",
+        );
+        newLogs.push(
+          "[!] ACTION: Authenticate your operator dossier to unlock CSV, JSON, and report downloads.",
+        );
+        setAuthGateOpen(true);
+      } else if (exportFmt === "csv") {
         exportRunLedgerCSV(ledgerData);
         newLogs.push("[+] SUCCESS: Exported run ledger data in CSV format.");
       } else if (exportFmt === "report" || exportFmt === "html" || exportFmt === "dossier") {
@@ -2261,9 +2609,11 @@ function SimulationPage() {
     } else if (cmd === "scan" || cmd === "init" || cmd === "nmap" || cmd === "probe") {
       newLogs.push("[*] SCANNING SCADA ICS TOPOLOGY NODES...");
       if (targetArg) {
-        const targetNode = NODES.find(
-          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
-        );
+        const targetNode =
+          resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+          );
         if (targetNode) triggerNodeTarget(targetNode.id, "scan");
       } else {
         triggerNodeTarget(NODES[0].id, "scan");
@@ -2307,21 +2657,91 @@ function SimulationPage() {
       } else {
         newLogs.push(`[*] SIMULATION TIMELINE COMPLETE at T+${fmt(t)}.`);
       }
+    } else if (cmd === "blast" || cmd === "blast-radius" || cmd === "radius") {
+      const targetNode = targetArg
+        ? resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) =>
+              n.id.toLowerCase() === targetArg ||
+              n.label.toLowerCase() === targetArg ||
+              n.label.toLowerCase().includes(targetArg),
+          )
+        : NODES.find(
+            (n) =>
+              n.id === "switch-a" ||
+              n.id === "nocgw" ||
+              n.kind.toLowerCase().includes("switch") ||
+              n.kind.toLowerCase().includes("gateway") ||
+              n.ring === 2,
+          ) || NODES[0];
+
+      if (!targetNode) {
+        newLogs.push(
+          `[!] ERROR: Target node '${targetArg || ""}' not found in ${sector.toUpperCase()} sector.`,
+          `[*] Available bridges & controllers: ${NODES.filter((n) => n.ring <= 3)
+            .map((n) => n.label)
+            .join(", ")}`,
+          `[*] Usage: blast <node_id> (e.g. 'blast SW-A', 'blast ${NODES[3]?.label || "PLC-3"}')`,
+        );
+      } else {
+        const result = computeBlastRadius(
+          NODES,
+          EDGES,
+          targetNode.id,
+          compromisedNodes,
+          isolatedNodes,
+          (x, y) => ({ x: 70 + (x / 100) * 760, y: 55 + (y / 100) * 380 }),
+          34,
+        );
+
+        setPreviewAirGapNode(targetNode.id);
+        playTerminalKeySound();
+
+        const blindedNames = result.blindedNodeIds
+          .map((id) => NODES.find((n) => n.id === id)?.label || id)
+          .join(", ");
+        const protectedNames = result.protectedNodeIds
+          .map((id) => NODES.find((n) => n.id === id)?.label || id)
+          .join(", ");
+
+        newLogs.push(
+          `[+] PRE-FLIGHT AIR-GAP BLAST EVALUATION: ${targetNode.label} (${targetNode.id.toUpperCase()})`,
+          `----------------------------------------------------------------------`,
+          `    Blinded Telemetry Partition: ${result.metrics.blindedCount} assets (${result.metrics.blindnessPercentage}%)`,
+          `    Affected Nodes:             [ ${blindedNames || "NONE"} ]`,
+          `    Infection Severance Delta:   +${result.metrics.containmentScoreDelta}% Containment`,
+          `    Protected Clean Enclave:    [ ${protectedNames || "NONE"} ]`,
+          `    Critical Safety Barrier:    ${result.metrics.safetySystemsIntact ? "[PRESERVED - SIS NOMINAL]" : "[WARNING - SAFETY EXPOSED]"}`,
+          `    Severed Topology Links:     ${result.severedEdgeKeys.length} physical trunks`,
+          `----------------------------------------------------------------------`,
+          `[*] ACTION: Type 'isolate ${targetNode.label}' or click [AIR-GAP ISOLATE] in HUD.`,
+        );
+        setShareToast(`[BLAST RADIUS]: ${targetNode.label} EVALUATED`);
+      }
     } else if (cmd === "isolate" || cmd === "airgap" || cmd === "quarantine") {
       if (!targetArg) {
-        newLogs.push("[!] ERROR: Please specify a target node ID (e.g. 'isolate plc-3').");
-      } else {
-        const targetNode = NODES.find(
-          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+        newLogs.push(
+          "[!] ERROR: Please specify a target node ID (e.g. 'isolate plc-3' or 'isolate SW-A').",
         );
+      } else {
+        const targetNode =
+          resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+          );
         if (targetNode) {
           triggerNodeTarget(targetNode.id, "isolate");
           setIsolatedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
+          if (previewAirGapNode === targetNode.id) {
+            setPreviewAirGapNode(null);
+          }
+          applyTwinCommandFn({ data: { command: `isolate ${targetNode.id}` } }).catch(() => {});
+          playAirGapRelaySound();
           if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
           newLogs.push(
-            `[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) AIR-GAPPED & QUARANTINED.`,
+            `[+] SUCCESS: Node ${targetNode.id.toUpperCase()} (${targetNode.label}) AIR-GAPPED & QUARANTINED.`,
             `[*] OT routing table updated. Physical air-gap barrier active.`,
-            `[*] Lateral propagation vector through ${targetNode.label} severed.`,
+            `[*] Lateral adversary propagation vector severed across network bridge.`,
           );
           setShareToast(`[AIR-GAP]: ${targetNode.label} ISOLATED`);
         } else {
@@ -2349,10 +2769,12 @@ function SimulationPage() {
         if (targetNode) {
           triggerNodeTarget(targetNode.id, "patch");
           setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
+          applyTwinCommandFn({ data: { command: `reset ${targetNode.id}` } }).catch(() => {});
+          applyTwinCommandFn({ data: { command: `patch ${targetNode.id}` } }).catch(() => {});
           if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
           newLogs.push(
             `[+] SUCCESS: Golden firmware baseline restored on ${targetNode.id}.`,
-            `[*] Telemetry setpoints restored to nominal operating envelope.`,
+            `[*] Telemetry setpoints restored to nominal operating envelope. TwinRuntime reset.`,
           );
           setShareToast(`[BASELINE RESTORED]: ${targetNode.label}`);
         } else {
@@ -2392,6 +2814,7 @@ function SimulationPage() {
             next.delete(targetNode.id);
             return next;
           });
+          applyTwinCommandFn({ data: { command: `reconnect ${targetNode.id}` } }).catch(() => {});
           newLogs.push(
             `[+] SUCCESS: Node ${targetNode.id} (${targetNode.label}) RECONNECTED to OT bus.`,
           );
@@ -2402,33 +2825,36 @@ function SimulationPage() {
     } else if (cmd === "override") {
       if (!targetArg) {
         newLogs.push(
-          "[!] ERROR: Usage: override <node_id> [parameter] [value] (e.g. 'override plc-3 frequency 60.0').",
+          "[!] ERROR: Usage: override <node_id> [parameter] [value] (e.g. 'override plc-3 frequency 50.0').",
         );
       } else {
-        const targetNode = NODES.find(
-          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
-        );
+        const targetNode =
+          resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+          );
         if (targetNode) {
           triggerNodeTarget(targetNode.id, "override");
           if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
-          const paramName = optArg ? optArg.toLowerCase() : "telemetry";
+          const paramName = optArg ? optArg.toLowerCase() : "frequency";
           const valNum = parts[3] ? parseFloat(parts[3]) : null;
+          const targetVal = valNum !== null && !isNaN(valNum) ? valNum : 50.0;
 
-          if (valNum !== null && !isNaN(valNum)) {
-            if (paramName.includes("freq") || paramName.includes("speed")) {
-              setTargetSpeed(valNum);
-            }
-            newLogs.push(
-              `[+] SUCCESS: Manual setpoint override issued to ${targetNode.id} (${targetNode.label}).`,
-              `[*] Parameter '${paramName}' set to ${valNum}. Telemetry updated.`,
-            );
-          } else {
-            setTargetSpeed(60.0);
-            newLogs.push(
-              `[+] SUCCESS: Manual setpoint override issued to ${targetNode.id} (${targetNode.label}).`,
-              `[*] Telemetry reset to nominal operational parameters (60.0 Hz).`,
-            );
-          }
+          // Dispatch setpoint override to authoritative TwinRuntime engine
+          applyTwinCommandFn({
+            data: { command: `override ${targetNode.id} ${paramName} ${targetVal}` },
+          }).catch(() => {});
+
+          // Lock controller setpoint in simulation state (does NOT alter UI playback speed!)
+          setControllerOverrides((prev) => ({
+            ...prev,
+            [targetNode.id]: { param: paramName, value: targetVal },
+          }));
+
+          newLogs.push(
+            `[+] SUCCESS: Manual setpoint override issued to ${targetNode.id} (${targetNode.label}).`,
+            `[*] Controller register '${paramName}' locked to ${targetVal}. Ground-truth telemetry updated.`,
+          );
           setShareToast(`[OVERRIDE]: APPLIED TO ${targetNode.label}`);
         } else {
           newLogs.push(`[!] ERROR: Unknown node '${targetArg}'. Type 'scan' to list nodes.`);
@@ -2472,6 +2898,27 @@ function SimulationPage() {
         "level: high",
       );
       setShareToast("[SIGMA]: SIEM DETECTION RULE EXPORTED");
+    } else if (cmd === "hai" || cmd === "replay") {
+      setIntelTab("hai");
+      newLogs.push(
+        "[+] ACTIVATING HAI CONTINUOUS ICS TELEMETRY REPLAY & ML EVALUATION...",
+        "[*] Streaming 1.0s ground-truth telemetry with empirical z-score & physical residual detection.",
+      );
+      setShareToast("[HAI]: CONTINUOUS REPLAY ACTIVE");
+    } else if (cmd === "mitre" || cmd === "stix" || cmd === "ttp") {
+      setIntelTab("mitre");
+      newLogs.push(
+        "[+] OPENING MITRE ATT&CK FOR ICS STIX 2.1 MATRIX...",
+        "[*] Indexed 118 real ICS techniques across 12 tactics with active mitigations.",
+      );
+      setShareToast("[MITRE]: ICS MATRIX OPENED");
+    } else if (cmd === "otcad" || cmd === "dossier" || cmd === "history") {
+      setIntelTab("otcad");
+      newLogs.push(
+        "[+] LOADING OTCAD HISTORICAL CYBERATTACK INCIDENT DOSSIERS...",
+        "[*] 127 verified real-world ICS attacks available for cross-sector intelligence.",
+      );
+      setShareToast("[OTCAD]: HISTORIC DOSSIERS LOADED");
     } else if (cmd === "inject" || cmd === "scenario") {
       const secArg = targetArg ? targetArg.toLowerCase() : "";
       const validSectors = [
@@ -2502,9 +2949,11 @@ function SimulationPage() {
       if (!targetArg) {
         newLogs.push("[!] ERROR: Specify target node ID to patch (e.g. 'patch plc-3').");
       } else {
-        const targetNode = NODES.find(
-          (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
-        );
+        const targetNode =
+          resolveSectorNode(targetArg, sector, NODES) ||
+          NODES.find(
+            (n) => n.id.toLowerCase() === targetArg || n.label.toLowerCase().includes(targetArg),
+          );
         if (targetNode) {
           triggerNodeTarget(targetNode.id, "patch");
           setPatchedNodes((prev) => new Set([...Array.from(prev), targetNode.id]));
@@ -2630,9 +3079,96 @@ function SimulationPage() {
     window.setTimeout(() => setShareToast(null), 3200);
   }, [buildShareUrl]);
 
+  const [drillSaved, setDrillSaved] = useState(false);
+
+  const saveDrillToLedger = useCallback(async () => {
+    try {
+      const mttdSec = Math.round(graphState.mttdSeconds ?? 840);
+      const mttrSec = Math.round(graphState.mttrSeconds ?? 172800);
+      const costNum = Math.round(graphState.costDollars ?? 4100000);
+      const scoreNum = Math.max(
+        70,
+        Math.min(100, Math.round(100 - outcome.mw / 20 - mttdSec / 60)),
+      );
+
+      if (!operator?.loggedIn) {
+        // Guest mode: save locally in browser guest store (zero DB pollution)
+        saveGuestRun({
+          id: `TR-GUEST-${Date.now().toString(36).toUpperCase()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+          timestamp: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          sector,
+          adversary: exercise.adversary || "APT / Cyber-Physical Vector",
+          branch: `Branch ${outcome.branch}: ${outcome.narrative.slice(0, 48)}`,
+          mwShed: outcome.mw,
+          score: scoreNum,
+          shareUrl: buildShareUrl(),
+          mttd: outcome.mttd,
+          mttr: outcome.mttr,
+          cost: outcome.cost,
+          isolatedNodes: Array.from(isolatedNodes),
+          attackType: "disruption",
+          adversaryProfile: "nation-state",
+          attackChain: exercise.title,
+        });
+
+        setDrillSaved(true);
+        setShareToast(`DRILL SAVED TO LOCAL GUEST LEDGER · HW-${outcome.dossierId}`);
+        window.setTimeout(() => setShareToast(null), 3500);
+        return;
+      }
+
+      setShareToast("PERSISTING DRILL TO DATABASE…");
+      await saveTrainingRun({
+        data: {
+          sector,
+          adversary: exercise.adversary || "APT / Cyber-Physical Vector",
+          branch: `Branch ${outcome.branch}: ${outcome.narrative.slice(0, 48)}`,
+          mwShed: outcome.mw,
+          mttd: mttdSec,
+          mttr: mttrSec,
+          cost: costNum,
+          score: scoreNum,
+          shareUrl: buildShareUrl(),
+          isolatedNodes: Array.from(isolatedNodes),
+          attackType: "disruption",
+          adversaryProfile: "nation-state",
+          attackChain: exercise.title,
+        },
+      });
+
+      setDrillSaved(true);
+      setShareToast(`DRILL SAVED TO LEDGER · HW-${outcome.dossierId}`);
+      window.setTimeout(() => setShareToast(null), 3500);
+    } catch (err) {
+      console.error("Failed to log drill run:", err);
+      setShareToast("FAILED TO LOG DRILL TO DATABASE");
+      window.setTimeout(() => setShareToast(null), 3200);
+    }
+  }, [
+    operator?.loggedIn,
+    outcome,
+    sector,
+    exercise,
+    isolatedNodes,
+    buildShareUrl,
+    graphState.costDollars,
+    graphState.mttdSeconds,
+    graphState.mttrSeconds,
+  ]);
+
   const [exporting, setExporting] = useState(false);
 
   const exportDossier = useCallback(async () => {
+    if (!operator?.loggedIn) {
+      if (!canGuestDownloadPdf()) {
+        setShareToast("GUEST LIMIT REACHED (1/1 PDF) · SIGN IN FOR UNLIMITED CERTIFIED REPORTS");
+        setAuthGateOpen(true);
+        window.setTimeout(() => setShareToast(null), 4000);
+        return;
+      }
+    }
+
     setExporting(true);
     setShareToast("RENDERING DOSSIER…");
     try {
@@ -2679,6 +3215,15 @@ function SimulationPage() {
           H - 22,
           { align: "right" },
         );
+
+        if (!operator?.loggedIn) {
+          pdf.setFont("courier", "bold");
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(255, 191, 46); // Acid Amber
+          pdf.text("[GUEST AUDIT TRIAL · SAMPLE EXPORT 1/1 · REGISTER TO CERTIFY]", W / 2, 44, {
+            align: "center",
+          });
+        }
       };
 
       // PAGE 1 — COVER
@@ -2850,8 +3395,18 @@ function SimulationPage() {
       );
 
       pdf.save(`twinsec-dossier-HW-${outcome.dossierId}.pdf`);
-      setShareToast("DOSSIER EXPORTED · twinsec-dossier-HW-" + outcome.dossierId + ".pdf");
-      window.setTimeout(() => setShareToast(null), 3200);
+      // Auto-persist drill to operator ledger (local for guest, DB for operator)
+      saveDrillToLedger().catch((err) => {
+        log.error("Failed to auto-persist drill to ledger:", err);
+      });
+
+      if (!operator?.loggedIn) {
+        recordGuestPdfDownload();
+        setShareToast("SAMPLE GUEST PDF EXPORTED (1/1) · SIGN IN FOR UNLIMITED CERTIFIED REPORTS");
+      } else {
+        setShareToast("DOSSIER EXPORTED · twinsec-dossier-HW-" + outcome.dossierId + ".pdf");
+      }
+      window.setTimeout(() => setShareToast(null), 3500);
       if (wasPlaying) setPlaying(true);
     } catch (err) {
       console.error(err);
@@ -2860,7 +3415,22 @@ function SimulationPage() {
     } finally {
       setExporting(false);
     }
-  }, [t, targetSpeed, choices, outcome, compromisedNodes, activeIdx, playing, exercise]);
+  }, [
+    t,
+    targetSpeed,
+    choices,
+    outcome,
+    compromisedNodes,
+    activeIdx,
+    playing,
+    exercise,
+    saveDrillToLedger,
+    operator?.loggedIn,
+    DECISIONS,
+    EVENTS,
+    NODES,
+    TOTAL,
+  ]);
 
   return (
     <main ref={revealRef} className="min-h-screen bg-background text-foreground flex flex-col">
@@ -2874,6 +3444,37 @@ function SimulationPage() {
         speed={displaySpeed}
         live={liveMetrics}
         halt={halt}
+        incidentLabel={
+          activeHistoricalAttack
+            ? `${activeHistoricalAttack.code} · ${activeHistoricalAttack.name}`
+            : undefined
+        }
+      />
+
+      {/* TIMELINE TRANSPORT & PLAYBACK CONTROLS */}
+      <Transport
+        t={t}
+        setT={setT}
+        playing={playing}
+        setPlaying={setPlaying}
+        speed={targetSpeed}
+        setSpeed={setTargetSpeed}
+        displaySpeed={displaySpeed}
+        activeIdx={activeIdx}
+        choices={choices}
+        events={EVENTS}
+        decisions={DECISIONS}
+        total={TOTAL}
+        onStep={() => {
+          const nextEvt = EVENTS.find((e) => e.t > t);
+          setT(nextEvt ? nextEvt.t : Math.min(TOTAL, t + 10));
+        }}
+        onReset={() => {
+          setT(0);
+          setChoices({});
+          setIsolatedNodes(new Set());
+          setPlaying(false);
+        }}
       />
 
       {/* SECTION 01 — FULL-SCREEN EXPANSIVE COMMAND BRIDGE TOPOLOGY VIEWPORT */}
@@ -2884,7 +3485,7 @@ function SimulationPage() {
         {/* Background Canvas: High-Resolution Schematic & Grid Rules */}
         <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
         <img
-          src={schematic}
+          src={getSectorSchematic(sector)}
           alt=""
           aria-hidden
           className="absolute inset-0 h-full w-full object-cover opacity-10 pointer-events-none"
@@ -2897,6 +3498,15 @@ function SimulationPage() {
             <span className="mono-label px-2.5 py-1 bg-accent text-accent-foreground font-bold text-xs">
               {sector.toUpperCase()} RANGE
             </span>
+            {sector === "water" ? (
+              <span className="mono-label px-2 py-0.5 bg-accent/20 text-accent border border-accent text-[10px] font-bold tracking-wider">
+                ● LIVE CYBER-PHYSICAL ENGINE
+              </span>
+            ) : (
+              <span className="mono-label px-2 py-0.5 bg-muted text-muted-foreground border border-rule text-[10px] font-bold tracking-wider">
+                ○ SCRIPTED REPLAY
+              </span>
+            )}
             <div>
               <h1 className="display text-2xl sm:text-3xl lg:text-4xl leading-none inline-block">
                 {exercise.title}
@@ -2908,10 +3518,92 @@ function SimulationPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 mono-label text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mono-label text-xs">
+            {/* Simulation Mode Toggle (Autonomous Replay vs Tactical Drill) */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = !autoPlayMode;
+                setAutoPlayMode(nextMode);
+                setShareToast(
+                  nextMode
+                    ? "AUTONOMOUS REPLAY ACTIVE: Watch attack unfold continuously without halts"
+                    : "TACTICAL DRILL ACTIVE: Simulator will challenge operator at decision gates",
+                );
+              }}
+              className={`h-8 px-3 border-2 font-mono text-[11px] font-black uppercase transition-all flex items-center gap-1.5 cursor-pointer ${
+                autoPlayMode
+                  ? "bg-accent text-accent-foreground border-black shadow-[2px_2px_0px_#000000]"
+                  : "bg-card text-foreground border-rule hover:border-accent"
+              }`}
+              title={
+                autoPlayMode
+                  ? "Continuous Autonomous Run (Does not freeze on decisions)"
+                  : "Interactive Range Drill (Pauses for operator mitigation decisions)"
+              }
+            >
+              <span
+                className={`size-2 shrink-0 ${autoPlayMode ? "bg-black animate-pulse" : "bg-warn"}`}
+              />
+              <span>{autoPlayMode ? "AUTONOMOUS REPLAY" : "TACTICAL DRILL"}</span>
+            </button>
+
+            {/* Water Sector Scenario Preset Switcher */}
+            {sector === "water" && (
+              <div className="flex items-center border-2 border-rule bg-card/60">
+                <Link
+                  to="/simulation"
+                  search={{ sector: "water" }}
+                  className={`px-2.5 py-1 text-[10px] font-mono font-bold transition-colors ${
+                    !search.attack
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground/70 hover:text-foreground hover:bg-muted"
+                  }`}
+                  title="Basin-3 Chlorine Setpoint Replay (+6x)"
+                >
+                  BASIN-3 (Cl2)
+                </Link>
+                <Link
+                  to="/simulation"
+                  search={{ sector: "water", attack: "oldsmar" }}
+                  className={`px-2.5 py-1 text-[10px] font-mono font-bold border-l border-rule transition-colors ${
+                    search.attack === "oldsmar"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground/70 hover:text-foreground hover:bg-muted"
+                  }`}
+                  title="Oldsmar 2021: Sodium Hydroxide Chemical Overdose (+111x)"
+                >
+                  OLDSMAR (NaOH)
+                </Link>
+                <Link
+                  to="/simulation"
+                  search={{ sector: "water", attack: "aliquippa" }}
+                  className={`px-2.5 py-1 text-[10px] font-mono font-bold border-l border-rule transition-colors ${
+                    search.attack === "aliquippa"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground/70 hover:text-foreground hover:bg-muted"
+                  }`}
+                  title="Aliquippa 2023: Unitronics Booster Station DoS"
+                >
+                  ALIQUIPPA (PUMP)
+                </Link>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setBriefingOpen(true)}
+              className="h-8 px-3 border-2 border-black bg-muted/80 text-foreground font-mono text-[11px] font-black uppercase shadow-[2px_2px_0px_#000000] hover:border-accent hover:text-accent active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Open Red Cell vs Blue Cell Tactical Mission Briefing"
+            >
+              <Shield className="size-3.5 stroke-[2.5]" />
+              <span className="hidden sm:inline">MISSION BRIEFING</span>
+            </button>
             <span className="text-foreground/70 hidden md:inline">
               OPERATOR:{" "}
-              <span className="text-foreground font-bold">{operator?.callsign ?? "N. ARENS"}</span>
+              <span className="text-foreground font-bold">
+                {operator?.callsign ?? "GUEST OPERATOR"}
+              </span>
             </span>
             <span className="text-foreground/70 hidden sm:inline">
               ADVERSARY: <span className="text-accent font-bold">{exercise.adversary}</span>
@@ -2926,12 +3618,13 @@ function SimulationPage() {
           </div>
         </div>
 
-        {/* CENTER VIEWPORT: EXPANSIVE EDGE-TO-EDGE TOPOLOGY CANVAS */}
-        <div className="relative flex-1 w-full min-h-[440px] sm:min-h-[500px] lg:min-h-[560px] p-2 sm:p-4">
+        {/* CENTER VIEWPORT: EXPANSIVE EDGE-TO-EDGE TOPOLOGY CANVAS WITH NON-REFLOWING HUD OVERLAYS */}
+        <div className="relative flex-1 w-full min-h-[440px] sm:min-h-[500px] lg:min-h-[560px] p-2 sm:p-4 overflow-hidden">
           <Topology2D
             nodes={NODES}
             edges={EDGES}
             compromised={compromisedNodes}
+            blockedNodes={blockedNodes}
             selected={selected}
             onSelect={(id, source) => handleSelectNode(id, source)}
             t={t}
@@ -2939,7 +3632,70 @@ function SimulationPage() {
             isolatedNodes={isolatedNodes}
             commandActiveNode={commandActiveNode}
             commandActiveAction={commandActiveAction}
+            previewAirGapNode={previewAirGapNode}
+            onHoverNode={handleHoverNode}
+            blastRadiusResult={blastRadiusResult}
           />
+
+          {/* FLOATING NON-REFLOWING ASSET DOSSIER HOVER TAB */}
+          {hoveredNode && !blastRadiusResult && (
+            <div
+              className="absolute top-3 right-3 sm:right-6 z-30 pointer-events-auto"
+              onPointerEnter={() => {
+                if (hoverTimeoutRef.current) {
+                  window.clearTimeout(hoverTimeoutRef.current);
+                  hoverTimeoutRef.current = null;
+                }
+              }}
+              onPointerLeave={() => {
+                setHoveredNodeId(null);
+              }}
+            >
+              <AssetDossierTab
+                node={hoveredNode}
+                sector={sector}
+                isCompromised={compromisedNodes.has(hoveredNode.id)}
+                isIsolated={isolatedNodes.has(hoveredNode.id)}
+                isShielded={blockedNodes.has(hoveredNode.id)}
+                isPatched={patchedNodes.has(hoveredNode.id)}
+                onOpenFullDossier={() => {
+                  setSelected(hoveredNode.id);
+                  setHoveredNodeId(null);
+                }}
+                onEvaluateBlastRadius={() => {
+                  setPreviewAirGapNode(hoveredNode.id);
+                }}
+                onClose={() => setHoveredNodeId(null)}
+              />
+            </div>
+          )}
+
+          {/* FLOATING NON-REFLOWING PRE-FLIGHT AIR-GAP BLAST RADIUS HUD */}
+          {blastRadiusResult && (
+            <div className="absolute top-3 left-3 right-3 sm:left-6 sm:right-6 z-30 pointer-events-auto max-h-[85%] overflow-y-auto">
+              <BlastRadiusHUD
+                result={blastRadiusResult}
+                nodes={NODES}
+                onConfirmAirGap={(nodeId) => {
+                  setIsolatedNodes((prev) => new Set([...Array.from(prev), nodeId]));
+                  setPreviewAirGapNode(null);
+                  triggerNodeTarget(nodeId, "isolate");
+                  playAirGapRelaySound();
+                  if (firstActionTime === null) setFirstActionTime(t > 0 ? t : 750);
+                  const targetLbl =
+                    NODES.find((n) => n.id === nodeId)?.label || nodeId.toUpperCase();
+                  setShareToast(`[AIR-GAP ISOLATED]: ${targetLbl}`);
+                  setTerminalLogs((prev) => [
+                    ...prev,
+                    `[+] AIR-GAP EXECUTED VIA HUD: ${targetLbl} (${nodeId.toUpperCase()}) ISOLATED.`,
+                    `[*] Physical relay latched. Lateral propagation severed.`,
+                    `[*] Enclave reachability recalculated across OT bus.`,
+                  ]);
+                }}
+                onDismiss={() => setPreviewAirGapNode(null)}
+              />
+            </div>
+          )}
         </div>
 
         {/* BOTTOM INTEGRATED TELEMETRY & TACTICAL DOCK */}
@@ -3215,166 +3971,349 @@ function SimulationPage() {
         </div>
       </section>
 
-      {/* SECTION 04 — EXPLAINABLE AI & THREAT DIAGNOSTICS */}
+      {/* SECTION 04 — EXPLAINABLE AI & EMPIRICAL GROUND TRUTH BENCHMARKS */}
       <section
         data-reveal
         className="border-b border-rule bg-background py-16 sm:py-20 px-5 sm:px-6 lg:px-10"
       >
         <div className="mx-auto max-w-[1600px] space-y-8">
-          <div className="flex flex-wrap items-baseline justify-between border-b border-rule pb-6">
+          <div className="flex flex-wrap items-baseline justify-between border-b-2 border-rule pb-6 gap-4">
             <div>
               <p className="mono-label text-accent">
-                SECTION 04 — EXPLAINABLE AI & THREAT DIAGNOSTICS
+                SECTION 04 — EXPLAINABLE AI & EMPIRICAL THREAT DIAGNOSTICS
               </p>
               <h3 className="display text-3xl sm:text-4xl lg:text-5xl mt-2">
-                Explainable AI Event Telemetry
+                Ground Truth Telemetry & Causal Diagnostics
               </h3>
             </div>
-            <span className="mono-label text-xs text-foreground/60">PURDUE MODEL LEVEL 0–3</span>
+            <div className="flex items-center gap-3">
+              <span className="mono-label text-xs px-2.5 py-1 border border-rule bg-card text-foreground/80">
+                SECTOR: {sector.toUpperCase()}
+              </span>
+              <span className="mono-label text-xs px-2.5 py-1 bg-accent text-accent-foreground font-bold">
+                PURDUE L0–L3.5
+              </span>
+            </div>
           </div>
 
           <div className="w-full">
-            <ExplainableAIPanel
-              sector={sector}
-              activeEvent={
-                activeIdx >= 0
-                  ? {
-                      eventId: `evt-${activeIdx}`,
-                      timestamp: EVENTS[activeIdx].t,
-                      type: "TELEMETRY_ANOMALY" as const,
-                      sourceAssetId: EVENTS[activeIdx].node,
-                      targetAssetId: EVENTS[activeIdx].node,
-                      severity:
-                        EVENTS[activeIdx].sev === "MEDIUM"
-                          ? "WARN"
-                          : (EVENTS[activeIdx].sev as "INFO" | "WARN" | "HIGH" | "CRITICAL"),
-                      title: EVENTS[activeIdx].title,
-                      description: EVENTS[activeIdx].desc,
-                      data: {},
-                    }
-                  : null
-              }
-            />
+            <Suspense fallback={<SimPanelFallback label="EXPLAINABLE AI" />}>
+              <ExplainableAIPanel
+                sector={sector}
+                activeEvent={activeEventObj}
+                onRunCommand={(cmd) => {
+                  setTerminalOpen(true);
+                  setTerminalInput(cmd);
+                  handleTerminalSubmit(undefined, cmd);
+                }}
+              />
+            </Suspense>
           </div>
 
-          {/* CYBER RANGE INTEL & PROTOCOL INSPECTOR TOOLKIT */}
-          <div className="w-full border border-rule bg-card/30 p-5 space-y-4 font-mono text-xs">
-            <div className="flex flex-wrap items-center justify-between border-b border-rule pb-3 gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-accent font-bold text-xs uppercase tracking-widest">
-                  CYBER RANGE INTEL & PROTOCOL INSPECTOR TOOLKIT
+          {/* THE 3-PILLAR EMPIRICAL GROUND TRUTH COMMAND DECK */}
+          <div className="w-full border-2 border-rule bg-card p-5 sm:p-6 space-y-6 shadow-comic font-mono text-xs">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between border-b-2 border-rule pb-4 gap-4">
+              <div className="space-y-1">
+                <span className="mono-label text-xs text-accent font-bold tracking-wider uppercase">
+                  EMPIRICAL DATASET REPOSITORIES
                 </span>
-                <span className="text-foreground/40 text-[10px]">|</span>
-                <span className="text-foreground/60 text-[10px]">
-                  TARGET SECTOR: {sector.toUpperCase()}
-                </span>
+                <p className="text-[11px] text-foreground/60">
+                  REAL-TIME VALIDATION AGAINST HAICon TESTBED, 127 OTCAD ATTACK DOSSIERS, AND MITRE
+                  FOR ICS
+                </p>
               </div>
 
-              {/* Tab Selector Toolbar */}
-              <div className="flex items-center gap-2">
+              {/* 3 Prominent Primary Pillars */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("hai")}
+                  className={`px-3 sm:px-4 py-2 text-xs font-bold uppercase transition-all cursor-pointer border-2 ${
+                    intelTab === "hai"
+                      ? "bg-accent text-accent-foreground border-black shadow-comic-sm"
+                      : "bg-background text-foreground/80 border-rule hover:border-accent"
+                  }`}
+                >
+                  [01] HAICON SENSOR REPLAY & DRIFT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("otcad")}
+                  className={`px-3 sm:px-4 py-2 text-xs font-bold uppercase transition-all cursor-pointer border-2 ${
+                    intelTab === "otcad"
+                      ? "bg-accent text-accent-foreground border-black shadow-comic-sm"
+                      : "bg-background text-foreground/80 border-rule hover:border-accent"
+                  }`}
+                >
+                  [02] OTCAD 127 HISTORIC ATTACKS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntelTab("mitre")}
+                  className={`px-3 sm:px-4 py-2 text-xs font-bold uppercase transition-all cursor-pointer border-2 ${
+                    intelTab === "mitre"
+                      ? "bg-accent text-accent-foreground border-black shadow-comic-sm"
+                      : "bg-background text-foreground/80 border-rule hover:border-accent"
+                  }`}
+                >
+                  [03] MITRE ATT&CK FOR ICS
+                </button>
+
+                <div className="h-6 w-px bg-rule mx-1 hidden sm:block" />
                 <button
                   type="button"
                   onClick={() => setIntelTab("packets")}
-                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1.5 text-[11px] font-mono border transition-colors cursor-pointer ${
                     intelTab === "packets"
-                      ? "bg-accent text-accent-foreground border-accent"
-                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                      ? "bg-foreground text-background border-foreground font-bold"
+                      : "border-rule text-foreground/60 hover:text-foreground"
                   }`}
                 >
-                  [PACKET INSPECTOR]
+                  PACKETS
                 </button>
                 <button
                   type="button"
                   onClick={() => setIntelTab("guidance")}
-                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1.5 text-[11px] font-mono border transition-colors cursor-pointer ${
                     intelTab === "guidance"
-                      ? "bg-accent text-accent-foreground border-accent"
-                      : "bg-background text-foreground/70 border-rule hover:border-accent"
+                      ? "bg-foreground text-background border-foreground font-bold"
+                      : "border-rule text-foreground/60 hover:text-foreground"
                   }`}
                 >
-                  [KILL CHAIN & PURDUE GUIDANCE]
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntelTab("cve")}
-                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
-                    intelTab === "cve"
-                      ? "bg-accent text-accent-foreground border-accent"
-                      : "bg-background text-foreground/70 border-rule hover:border-accent"
-                  }`}
-                >
-                  [CVE & CISA INTEL]
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntelTab("anatomy")}
-                  className={`px-3 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
-                    intelTab === "anatomy"
-                      ? "bg-accent text-accent-foreground border-accent"
-                      : "bg-background text-foreground/70 border-rule hover:border-accent"
-                  }`}
-                >
-                  [ATTACK ANATOMY & 3 SURFACES]
+                  PURDUE GUIDANCE
                 </button>
               </div>
             </div>
 
-            {/* Tab 1: Live SCADA Protocol Packet Inspector */}
-            {intelTab === "packets" && (
-              <div className="animate-fade-in space-y-2">
-                <div className="flex justify-between items-center text-[10px] text-foreground/50 mb-1">
-                  <span>LIVE INDUSTRIAL PROTOCOL CAPTURE STREAM</span>
-                  <span>MODBUS-TCP / DNP3 / IEC-104 PROTOCOL DECODER</span>
+            <Suspense fallback={<SimPanelFallback label={intelTab.toUpperCase()} />}>
+              {/* Tab 1: Live SCADA Protocol Packet Inspector & Modbus Sigma Rule Viewer */}
+              {intelTab === "packets" && (
+                <div className="animate-fade-in space-y-3">
+                  <div className="flex flex-wrap justify-between items-center gap-2 border-b border-rule pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="size-2 bg-accent inline-block animate-pulse" />
+                      <span className="font-mono font-bold text-xs text-foreground">
+                        INDUSTRIAL OT PROTOCOL ANALYZER
+                      </span>
+                      <span className="mono-label text-[10px] text-accent/80 border border-accent/30 px-1.5 py-0.5 bg-accent/5">
+                        MODBUS-TCP / DNP3 / S7COMM
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 font-mono text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => setPacketSubTab("hex")}
+                        className={`px-2.5 py-1 border transition-colors cursor-pointer ${
+                          packetSubTab === "hex"
+                            ? "bg-foreground text-background border-foreground font-bold"
+                            : "border-rule text-foreground/60 hover:text-foreground"
+                        }`}
+                      >
+                        HEX DECODE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPacketSubTab("sigma")}
+                        className={`px-2.5 py-1 border transition-colors cursor-pointer flex items-center gap-1 ${
+                          packetSubTab === "sigma"
+                            ? "bg-accent text-accent-foreground border-accent font-bold"
+                            : "border-rule text-foreground/60 hover:text-foreground"
+                        }`}
+                      >
+                        <span className="size-1.5 bg-current inline-block" />
+                        CORRELATED SIGMA RULE
+                      </button>
+                    </div>
+                  </div>
+
+                  {packetSubTab === "hex" ? (
+                    <PacketInspector event={activeIdx >= 0 ? EVENTS[activeIdx] : null} t={t} />
+                  ) : (
+                    (() => {
+                      const curEvt = activeIdx >= 0 ? EVENTS[activeIdx] : null;
+                      const targetNodeObj = curEvt
+                        ? NODES.find((n) => n.id === curEvt.node)
+                        : NODES[0];
+                      const curSigmaYaml = generateSigmaRule({
+                        sector,
+                        mitreId: curEvt?.mitreId || "T0855",
+                        mitreTactic: curEvt?.tag || "Inhibit Response Function",
+                        nodeId: targetNodeObj?.id || "plc-01",
+                        nodeLabel: targetNodeObj?.label || "PRIMARY PLC CONTROLLER",
+                        vendor: targetNodeObj?.vendor || "Siemens / Schneider",
+                        eventType: curEvt?.tag || "MODBUS_COMMAND_INJECTION",
+                      });
+
+                      return (
+                        <div className="border border-rule bg-card/50 p-3 space-y-3 font-mono text-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule/60 pb-2">
+                            <div>
+                              <span className="text-accent font-bold text-[11px] block">
+                                // OT PROTOCOL SIEM DETECTION (ZEEK / SURICATA / SPLUNK)
+                              </span>
+                              <span className="text-[10px] text-foreground/60">
+                                PROTOCOL FRAME:{" "}
+                                <strong className="text-foreground">
+                                  {curEvt?.tag || "ACTIVE FRAME"}
+                                </strong>{" "}
+                                · MITRE {curEvt?.mitreId || "T0855"}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(curSigmaYaml);
+                                  setCopiedPacketSigma(true);
+                                  setTimeout(() => setCopiedPacketSigma(false), 2000);
+                                }}
+                                className="px-2.5 py-1 border border-rule bg-background text-[10px] font-bold text-accent hover:border-accent cursor-pointer"
+                              >
+                                {copiedPacketSigma ? "COPIED ✅" : "COPY YAML"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  downloadSigmaRuleYml(
+                                    `twinsec_modbus_sigma_${sector}_${curEvt?.mitreId || "T0855"}.yml`,
+                                    curSigmaYaml,
+                                  );
+                                }}
+                                className="px-2.5 py-1 bg-accent text-accent-foreground text-[10px] font-bold hover:bg-foreground hover:text-background cursor-pointer"
+                              >
+                                DOWNLOAD .YML ↓
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="relative">
+                            <pre className="p-3 bg-black border border-rule text-[11px] text-foreground/90 overflow-x-auto max-h-56 leading-relaxed font-mono">
+                              {curSigmaYaml}
+                            </pre>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-foreground/50 pt-1">
+                            <span>
+                              MAPPED ICS ATT&CK: {curEvt?.mitreId || "T0855"} (UNAUTHORIZED COMMAND)
+                            </span>
+                            <span className="text-accent">
+                              ZEEK SERVICE: {sector === "power" ? "dnp3" : "modbus"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
-                <PacketInspector event={activeIdx >= 0 ? EVENTS[activeIdx] : null} t={t} />
-              </div>
-            )}
+              )}
 
-            {/* Tab 2: Purdue Model & Kill Chain Phase Guidance */}
-            {intelTab === "guidance" && (
-              <div className="animate-fade-in space-y-2">
-                <PhaseGuidancePanel
-                  sector={sector}
-                  role="BLUE"
-                  currentPhase="CONTAINMENT"
-                  eventTagsSeen={activeEvents.map((e) => e.tag)}
-                  onRunCommand={(cmd) => {
-                    setTerminalOpen(true);
-                    setTerminalInput(cmd);
-                    const fakeForm = {
-                      preventDefault: () => {},
-                    } as React.FormEvent<HTMLFormElement>;
-                    setTimeout(() => handleTerminalSubmit(fakeForm), 50);
-                  }}
-                />
-              </div>
-            )}
+              {/* Tab 2: Purdue Model & Kill Chain Phase Guidance */}
+              {intelTab === "guidance" && (
+                <div className="animate-fade-in space-y-2">
+                  <PhaseGuidancePanel
+                    sector={sector}
+                    role="BLUE"
+                    currentPhase="CONTAINMENT"
+                    eventTagsSeen={activeEvents.map((e) => e.tag)}
+                    onRunCommand={(cmd) => {
+                      setTerminalOpen(true);
+                      setTerminalInput(cmd);
+                      handleTerminalSubmit(undefined, cmd);
+                    }}
+                  />
+                </div>
+              )}
 
-            {/* Tab 3: CVE & CISA Sector Intelligence */}
-            {intelTab === "cve" && (
-              <div className="animate-fade-in space-y-2">
-                <CVEIntelPanel
-                  nodeId={
-                    selected || (activeIdx >= 0 ? EVENTS[activeIdx].node : NODES[0]?.id || "plc-3")
-                  }
-                  nodeLabel={
-                    selected || (activeIdx >= 0 ? EVENTS[activeIdx].node.toUpperCase() : "PLC-3")
-                  }
-                  onClose={() => setSelected(null)}
-                />
-              </div>
-            )}
+              {/* Tab 3: CVE & CISA Sector Intelligence */}
+              {intelTab === "cve" && (
+                <div className="animate-fade-in space-y-2">
+                  <CVEIntelPanel
+                    nodeId={
+                      selected ||
+                      (activeIdx >= 0 ? EVENTS[activeIdx].node : NODES[0]?.id || "plc-3")
+                    }
+                    nodeLabel={
+                      selected || (activeIdx >= 0 ? EVENTS[activeIdx].node.toUpperCase() : "PLC-3")
+                    }
+                    onClose={() => setSelected(null)}
+                  />
+                </div>
+              )}
 
-            {/* Tab 4: Attack Anatomy & 3 Attack Surfaces Reference */}
-            {intelTab === "anatomy" && (
-              <div className="animate-fade-in space-y-2">
-                <AttackAnatomyPanel
-                  sector={sector}
-                  adversary={exercise.adversary}
-                  protocol={exercise.protocols}
-                />
-              </div>
-            )}
+              {/* Tab 4: Attack Anatomy & 3 Attack Surfaces Reference */}
+              {intelTab === "anatomy" && (
+                <div className="animate-fade-in space-y-2">
+                  <AttackAnatomyPanel
+                    sector={sector}
+                    adversary={exercise.adversary}
+                    protocol={exercise.protocols}
+                  />
+                </div>
+              )}
+
+              {/* Tab 5: Real HAI Continuous Telemetry Replay & ML Ground-Truth Evaluation */}
+              {intelTab === "hai" && (
+                <div className="animate-fade-in flex justify-center">
+                  <HaiReplayPanel
+                    onClose={() => setIntelTab("packets")}
+                    onApplyAdvisory={(adv) => {
+                      setShareToast(`[ADVISORY APPLIED]: ${adv.incidentId}`);
+                      setTerminalLogs((prev) => [
+                        ...prev,
+                        `[+] ADVISORY APPLIED: ${adv.summary}`,
+                        `[*] MITRE Technique: ${adv.primaryTechnique?.name || "ICS Manipulation"}`,
+                      ]);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Tab 6: MITRE ATT&CK for ICS STIX 2.1 Knowledge Base Explorer */}
+              {intelTab === "mitre" && (
+                <div className="animate-fade-in flex justify-center">
+                  <MitreIcsExplorerPanel
+                    onClose={() => setIntelTab("packets")}
+                    onSelectTechnique={(tech) => {
+                      setShareToast(`[TTP SELECTED]: ${tech.externalId} - ${tech.name}`);
+                      setTerminalLogs((prev) => [
+                        ...prev,
+                        `[+] MITRE ICS TTP SELECTED: ${tech.externalId} - ${tech.name}`,
+                        `[*] Tactics: ${tech.tactics.join(", ")}`,
+                      ]);
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Tab 7: OTCAD Historical Cyberattack Dossier Repository */}
+              {intelTab === "otcad" && (
+                <div className="animate-fade-in flex justify-center">
+                  <OtcadBrowserPanel
+                    onClose={() => setIntelTab("packets")}
+                    initialIndustry={
+                      sector === "power"
+                        ? "Power and Utilities"
+                        : sector === "water"
+                          ? "Water/Waste Water"
+                          : sector === "oil-gas"
+                            ? "Petroleum"
+                            : undefined
+                    }
+                    onSelectIncident={(inc) => {
+                      setShareToast(`[CASE LOADED]: ${inc.name} (${inc.year})`);
+                      setTerminalLogs((prev) => [
+                        ...prev,
+                        `[+] HISTORICAL PRECEDENT LOADED: ${inc.name} (${inc.year})`,
+                        `[*] Sector: ${inc.industry} | Vector: ${inc.attackType}`,
+                        `[*] Target: ${inc.targetComponent} | Consequence: ${inc.consequence}`,
+                      ]);
+                    }}
+                  />
+                </div>
+              )}
+            </Suspense>
           </div>
         </div>
       </section>
@@ -3410,6 +4349,42 @@ function SimulationPage() {
               <Stat k="MTTR" v={outcome.mttr} big />
               <Stat k="COST" v={outcome.cost} big />
             </div>
+          </div>
+
+          {/* Tactical Action Bar: Save Drill & Export Dossier */}
+          <div className="flex flex-wrap items-center gap-4 mt-10 md:ml-[8.333%]">
+            <button
+              onClick={saveDrillToLedger}
+              disabled={drillSaved}
+              className="h-11 px-6 bg-accent text-accent-foreground border-2 border-black font-mono text-xs font-black uppercase shadow-[3px_3px_0px_#000000] hover:bg-lime-300 disabled:opacity-60 transition-all flex items-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5"
+            >
+              <FileSpreadsheet className="size-4 stroke-[2.5]" />
+              <span>{drillSaved ? "DRILL SAVED TO DATABASE ✓" : "RECORD DRILL TO LEDGER"}</span>
+            </button>
+
+            <button
+              onClick={exportDossier}
+              disabled={exporting}
+              className="h-11 px-6 bg-[#18181B] text-foreground border-2 border-rule font-mono text-xs font-bold uppercase shadow-[3px_3px_0px_#000000] hover:border-accent hover:text-accent transition-all flex items-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5"
+            >
+              <FileDown className="size-4 stroke-[2.5]" />
+              <span>{exporting ? "GENERATING DOSSIER..." : "EXPORT DOSSIER (PDF)"}</span>
+            </button>
+
+            <Link
+              to="/dashboard"
+              className="h-11 px-6 bg-black text-foreground/80 border-2 border-rule font-mono text-xs font-bold uppercase shadow-[3px_3px_0px_#000000] hover:border-accent hover:text-accent transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <span>VIEW IN OPERATOR DASHBOARD →</span>
+            </Link>
+
+            <Link
+              to="/leaderboard/submit"
+              className="h-11 px-6 bg-[#0a200a] text-accent border-2 border-accent font-mono text-xs font-black uppercase shadow-[3px_3px_0px_#000000] hover:bg-accent hover:text-black transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Trophy className="size-4 stroke-[2.5]" />
+              <span>SUBMIT TO LEADERBOARD →</span>
+            </Link>
           </div>
         </div>
       </section>
@@ -3451,6 +4426,7 @@ function SimulationPage() {
       {selected && activeNode && (
         <NodeOverlay
           node={activeNode}
+          sector={sector}
           onClose={() => setSelected(null)}
           compromised={compromisedNodes.has(activeNode.id)}
           isIsolated={isolatedNodes.has(activeNode.id)}
@@ -3521,7 +4497,7 @@ function SimulationPage() {
                 `[*] Real-time physics telemetry & live dashboard metrics recalculated automatically.`,
               ]);
               setShareToast(
-                `⚡ DECISION EXECUTED: ACT - Setpoint Override Issued to ${targetLabel}`,
+                `[DECISION EXECUTED]: ACT - Setpoint Override Issued to ${targetLabel}`,
               );
             } else {
               // DEFEND option
@@ -3581,16 +4557,18 @@ function SimulationPage() {
                 [CLOSE]
               </button>
             </div>
-            <SigmaRuleExport
-              sector={sector}
-              unmitigatedEvents={EVENTS.map((e) => ({
-                nodeId: e.node,
-                nodeLabel: e.node.toUpperCase(),
-                tactic: e.tag,
-                mitreId: "T0855",
-                vendor: "Siemens S7 / Modbus RTU",
-              }))}
-            />
+            <Suspense fallback={<SimPanelFallback label="SIGMA DETECTION RULE" />}>
+              <SigmaRuleExport
+                sector={sector}
+                unmitigatedEvents={EVENTS.map((e) => ({
+                  nodeId: e.node,
+                  nodeLabel: e.node.toUpperCase(),
+                  tactic: e.tag,
+                  mitreId: e.mitreId || "T1692.001",
+                  vendor: "Siemens S7 / Modbus RTU",
+                }))}
+              />
+            </Suspense>
           </div>
         </div>
       )}
@@ -3699,16 +4677,17 @@ function Transport({
   const pct = total > 0 ? (t / total) * 100 : 0;
   return (
     <section
-      className="border-b border-rule bg-card/85 sticky top-0 z-30 backdrop-blur-md"
+      className="border-b-2 border-rule bg-[#09090c] sticky top-0 z-40 shadow-[0_4px_0_0_#000000]"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 sm:py-3.5 flex flex-wrap items-center gap-3 sm:gap-6">
+      <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-10 py-2.5 sm:py-3 flex flex-wrap items-center gap-3 sm:gap-6">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setPlaying(!playing)}
-            className="size-10 sm:size-11 bg-accent text-accent-foreground font-bold text-sm sm:text-base flex items-center justify-center hover:bg-foreground hover:text-background transition-colors cursor-pointer"
+            className="size-10 sm:size-11 bg-accent text-accent-foreground border-2 border-black font-black text-sm sm:text-base flex items-center justify-center hover:bg-white transition-colors cursor-pointer shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5"
             aria-label={playing ? "Pause" : "Play"}
+            title={playing ? "Pause timeline (Space)" : "Start real-time playback (Space)"}
           >
             {playing ? "❚❚" : "▶"}
           </button>
@@ -3716,7 +4695,7 @@ function Transport({
             <button
               type="button"
               onClick={onStep}
-              className="size-10 sm:size-11 border border-rule mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer"
+              className="size-10 sm:size-11 border-2 border-black bg-[#16161b] text-foreground mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5"
               title="Step forward (+5s or next event)"
             >
               ⏭
@@ -3726,7 +4705,7 @@ function Transport({
             <button
               type="button"
               onClick={onReset}
-              className="size-10 sm:size-11 border border-rule mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer"
+              className="size-10 sm:size-11 border-2 border-black bg-[#16161b] text-foreground mono-label text-xs hover:border-accent hover:text-accent transition-colors flex items-center justify-center cursor-pointer shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5"
               title="Restart timeline to T+00:00"
             >
               ↺
@@ -3735,14 +4714,16 @@ function Transport({
         </div>
 
         <div className="mono-label tabular-nums text-xs">
-          T+{fmt(t)} <span className="text-foreground/40">/ {fmt(total)}</span>
+          <span className="text-foreground/50 text-[10px] block sm:inline mr-1">TIME:</span>
+          <strong className="text-accent text-sm">T+{fmt(t)}</strong>{" "}
+          <span className="text-foreground/40 text-xs">/ {fmt(total)}</span>
         </div>
 
         <div className="order-last sm:order-none flex-1 basis-full sm:basis-auto min-w-[200px] relative h-10 flex items-center">
           {/* progress track + filled segment */}
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3px] bg-rule" />
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[4px] bg-[#222228] border-b border-rule" />
           <div
-            className="absolute top-1/2 -translate-y-1/2 h-[3px] bg-accent transition-[width] duration-100"
+            className="absolute top-1/2 -translate-y-1/2 h-[4px] bg-accent transition-[width] duration-75"
             style={{ left: 0, width: `${pct}%` }}
           />
           {/* event markers — sync log + topology when clicked */}
@@ -3758,7 +4739,7 @@ function Transport({
               <span
                 className={`block size-2.5 sm:size-3 ${
                   i <= activeIdx ? sevColor(e.sev) : "bg-rule"
-                } group-hover:scale-150 transition-transform`}
+                } border border-black group-hover:scale-150 transition-transform`}
               />
               {i === activeIdx && (
                 <span className="absolute -top-4 left-1/2 -translate-x-1/2 mono-label text-[9px] text-accent whitespace-nowrap">
@@ -3801,18 +4782,18 @@ function Transport({
         </div>
 
         <div className="flex items-center gap-1.5 mono-label text-xs">
-          <span className="hidden sm:inline text-foreground/50 text-[10px]">SPEED:</span>
-          {[1, 15, 60, 240, 600, 1000].map((s) => {
+          <span className="hidden sm:inline text-foreground/50 text-[10px] font-bold">SPEED:</span>
+          {[1, 5, 15, 60, 120, 300].map((s) => {
             const active = Math.abs(speed - s) < 2;
             return (
               <button
                 key={s}
                 type="button"
                 onClick={() => setSpeed(s)}
-                className={`px-2 py-1 border tabular-nums transition-colors cursor-pointer text-[10px] sm:text-xs ${
+                className={`px-2 py-1 border-2 tabular-nums transition-colors cursor-pointer text-[10px] sm:text-xs ${
                   active
-                    ? "bg-accent text-accent-foreground border-accent font-bold"
-                    : "border-rule hover:border-accent hover:text-accent bg-card/20"
+                    ? "bg-accent text-accent-foreground border-black font-black shadow-[2px_2px_0px_#000000]"
+                    : "border-rule bg-[#16161b] text-foreground/70 hover:border-accent hover:text-accent"
                 }`}
               >
                 {s}×
@@ -3839,6 +4820,7 @@ function StatusBar({
   adversary = "UNIT-414",
   mlState = "NOMINAL",
   mlScore = 0.05,
+  incidentLabel,
 }: {
   t: number;
   playing: boolean;
@@ -3849,16 +4831,24 @@ function StatusBar({
   adversary?: string;
   mlState?: string;
   mlScore?: number;
+  incidentLabel?: string;
 }) {
   return (
     <div className="border-b border-rule bg-paper text-ink">
-      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 mono-label !text-ink/70 gap-2 sm:gap-3">
-        <span className="truncate">
-          STATE ·{" "}
-          <span className="text-ink font-bold">
-            {halt ? "HALTED" : playing ? "RUNNING" : "HOLD"}
+      <div className="mx-auto max-w-[1600px] px-5 sm:px-6 lg:px-10 py-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 mono-label !text-ink/70 gap-2 sm:gap-3 items-center">
+        {incidentLabel ? (
+          <span className="truncate md:col-span-2 flex items-center gap-1.5">
+            <span className="size-2 bg-danger animate-pulse shrink-0" />
+            <span className="text-ink font-bold uppercase truncate">{incidentLabel}</span>
           </span>
-        </span>
+        ) : (
+          <span className="truncate">
+            STATE ·{" "}
+            <span className="text-ink font-bold">
+              {halt ? "HALTED" : playing ? "RUNNING" : "HOLD"}
+            </span>
+          </span>
+        )}
         <span className="truncate">
           CLOCK · <span className="text-ink tabular-nums font-bold">T+{fmt(t)}</span>
         </span>
@@ -3953,6 +4943,7 @@ function ImpactTick() {
 
 function NodeOverlay({
   node,
+  sector = "power",
   onClose,
   compromised,
   isIsolated,
@@ -3965,6 +4956,7 @@ function NodeOverlay({
   onJump,
 }: {
   node: Node;
+  sector?: string;
   onClose: () => void;
   compromised: boolean;
   isIsolated?: boolean;
@@ -3976,11 +4968,38 @@ function NodeOverlay({
   t: number;
   onJump: (t: number) => void;
 }) {
+  const [dossierTab, setDossierTab] = useState<"hardware" | "sigma">("hardware");
+  const [copiedSigma, setCopiedSigma] = useState(false);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const targetEvent = events[0];
+  const sigmaYaml = useMemo(() => {
+    return generateSigmaRule({
+      sector,
+      mitreId: targetEvent?.mitreId || "T0855",
+      mitreTactic: targetEvent?.tag || "Inhibit Response Function",
+      nodeId: node.id,
+      nodeLabel: node.label,
+      vendor: node.vendor || "Siemens",
+      eventType: targetEvent?.tag || "UNAUTHORIZED_COMMAND",
+    });
+  }, [sector, targetEvent, node]);
+
+  const handleDownloadSigma = () => {
+    const filename = `twinsec_sigma_${sector}_${node.id}.yml`;
+    downloadSigmaRuleYml(filename, sigmaYaml);
+  };
+
+  const handleCopySigma = () => {
+    navigator.clipboard.writeText(sigmaYaml);
+    setCopiedSigma(true);
+    setTimeout(() => setCopiedSigma(false), 2000);
+  };
 
   return (
     <div
@@ -4034,129 +5053,231 @@ function NodeOverlay({
           </button>
         </div>
 
+        {/* Dossier Sub-Tabs */}
+        <div className="flex border-b border-rule bg-card/60 px-5 sm:px-6 pt-2 gap-2 font-mono text-xs">
+          <button
+            type="button"
+            onClick={() => setDossierTab("hardware")}
+            className={`px-3 py-2 border-b-2 font-bold cursor-pointer transition-colors ${
+              dossierTab === "hardware"
+                ? "border-accent text-accent bg-accent/10"
+                : "border-transparent text-foreground/60 hover:text-foreground"
+            }`}
+          >
+            HARDWARE & TIMELINE
+          </button>
+          <button
+            type="button"
+            onClick={() => setDossierTab("sigma")}
+            className={`px-3 py-2 border-b-2 font-bold cursor-pointer transition-colors flex items-center gap-1.5 ${
+              dossierTab === "sigma"
+                ? "border-accent text-accent bg-accent/10"
+                : "border-transparent text-foreground/60 hover:text-foreground"
+            }`}
+          >
+            <span className="size-2 bg-accent inline-block" />
+            SIGMA SIEM RULE
+          </button>
+        </div>
+
         {/* Content Body (Scrollable) */}
         <div className="overflow-y-auto flex-1">
-          <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-rule">
-            <div className="p-5 sm:p-6 border-b sm:border-b-0 sm:border-r border-rule">
-              <p className="mono-label">TELEMETRY & HARDWARE PROFILE</p>
-              <p
-                className={`display text-2xl sm:text-3xl mt-2 ${
-                  isIsolated
-                    ? "text-amber-400"
-                    : isPatched
-                      ? "text-emerald-400"
-                      : isBlocked
-                        ? "text-sky-400"
-                        : compromised
-                          ? "text-danger"
-                          : "text-accent"
-                }`}
-              >
-                {isIsolated
-                  ? "AIR-GAPPED FROM OT BUS"
-                  : isPatched
-                    ? "ATTESTED & SECURED"
-                    : isBlocked
-                      ? "CASCADE BLOCKED"
-                      : compromised
-                        ? "COMPROMISED VECTOR"
-                        : "NOMINAL OPERATION"}
-              </p>
-              <div className="mt-5 space-y-3 font-mono text-xs text-foreground/70">
-                <Row k="vendor" v={node.vendor} />
-                <Row k="firmware" v={node.firmware} />
-                <Row k="exposure" v={node.exposure} />
-                <Row k="ip_addr" v={`10.240.${node.ring}.${node.id.replace(/\D/g, "") || "10"}`} />
-                <Row k="t_clock" v={`T+${fmt(t)}`} />
+          {dossierTab === "sigma" ? (
+            <div className="p-5 sm:p-6 space-y-4 font-mono text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-3">
+                <div>
+                  <span className="mono-label text-[10px] text-accent font-bold tracking-widest block">
+                    // PRODUCTION SIEM DETECTION RULE (SIGMA STANDARD)
+                  </span>
+                  <span className="text-[11px] text-foreground/80">
+                    TARGET: <strong className="text-foreground">{node.label}</strong> ·{" "}
+                    {node.vendor} · PURDUE L{node.ring}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopySigma}
+                    className="px-3 py-1.5 border border-rule bg-card font-mono text-xs font-bold hover:border-accent hover:text-accent transition-colors cursor-pointer"
+                  >
+                    {copiedSigma ? "COPIED ✅" : "COPY YAML"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadSigma}
+                    className="px-3 py-1.5 bg-accent text-accent-foreground font-mono text-xs font-bold hover:bg-foreground hover:text-background transition-colors cursor-pointer shadow-brutal"
+                  >
+                    DOWNLOAD .YML ↓
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="p-2 border border-rule bg-card/40">
+                  <span className="text-foreground/40 block text-[9px]">MITRE TTP</span>
+                  <span className="text-accent font-bold">{targetEvent?.mitreId || "T0855"}</span>
+                </div>
+                <div className="p-2 border border-rule bg-card/40">
+                  <span className="text-foreground/40 block text-[9px]">LOG SOURCE</span>
+                  <span className="text-foreground font-bold">Zeek / Suricata</span>
+                </div>
+                <div className="p-2 border border-rule bg-card/40">
+                  <span className="text-foreground/40 block text-[9px]">PROTOCOL</span>
+                  <span className="text-foreground font-bold uppercase">
+                    {sector === "power" ? "DNP3 / IEC-104" : "MODBUS-TCP"}
+                  </span>
+                </div>
+                <div className="p-2 border border-rule bg-card/40">
+                  <span className="text-foreground/40 block text-[9px]">SEVERITY</span>
+                  <span className="text-danger font-bold">HIGH (CRITICAL)</span>
+                </div>
+              </div>
+
+              <div className="relative">
+                <pre className="p-4 bg-black border border-rule text-xs text-foreground/90 overflow-x-auto leading-relaxed font-mono">
+                  {sigmaYaml}
+                </pre>
+              </div>
+
+              <div className="p-3 border border-rule/60 bg-muted/10 text-[11px] text-foreground/70 leading-relaxed">
+                <span className="text-accent font-bold">// DEPLOYMENT ADVISORY: </span>
+                Export and ingest this rule into your SOC SIEM (Splunk, Elastic, or Microsoft
+                Sentinel) to trigger automated alerts on unauthorized control messages targeting{" "}
+                {node.label}.
               </div>
             </div>
-            <div className="p-5 sm:p-6">
-              <p className="mono-label">DOWNSTREAM & AFFECTED ASSETS</p>
-              <ul className="mt-3 space-y-2 font-serif text-base sm:text-lg">
-                {node.affects.map((a) => (
-                  <li key={a} className="flex items-baseline gap-3">
-                    <span className="size-1.5 bg-accent shrink-0 translate-y-0.5" />
-                    <span>{a}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-6 pt-4 border-t border-rule/50">
-                <p className="mono-label text-foreground/50 text-[10px]">ATTESTATION SIGNATURE</p>
-                <p className="font-mono text-[11px] text-accent/80 mt-1 truncate">
-                  SHA256:8f4e2b09a{node.id}93cf82e01b
-                </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 border-b border-rule">
+                <div className="p-5 sm:p-6 border-b sm:border-b-0 sm:border-r border-rule">
+                  <p className="mono-label">TELEMETRY & HARDWARE PROFILE</p>
+                  <p
+                    className={`display text-2xl sm:text-3xl mt-2 ${
+                      isIsolated
+                        ? "text-amber-400"
+                        : isPatched
+                          ? "text-emerald-400"
+                          : isBlocked
+                            ? "text-sky-400"
+                            : compromised
+                              ? "text-danger"
+                              : "text-accent"
+                    }`}
+                  >
+                    {isIsolated
+                      ? "AIR-GAPPED FROM OT BUS"
+                      : isPatched
+                        ? "ATTESTED & SECURED"
+                        : isBlocked
+                          ? "CASCADE BLOCKED"
+                          : compromised
+                            ? "COMPROMISED VECTOR"
+                            : "NOMINAL OPERATION"}
+                  </p>
+                  <div className="mt-5 space-y-3 font-mono text-xs text-foreground/70">
+                    <Row k="vendor" v={node.vendor} />
+                    <Row k="firmware" v={node.firmware} />
+                    <Row k="exposure" v={node.exposure} />
+                    <Row
+                      k="ip_addr"
+                      v={`10.240.${node.ring}.${node.id.replace(/\D/g, "") || "10"}`}
+                    />
+                    <Row k="t_clock" v={`T+${fmt(t)}`} />
+                  </div>
+                </div>
+                <div className="p-5 sm:p-6">
+                  <p className="mono-label">DOWNSTREAM & AFFECTED ASSETS</p>
+                  <ul className="mt-3 space-y-2 font-serif text-base sm:text-lg">
+                    {node.affects.map((a) => (
+                      <li key={a} className="flex items-baseline gap-3">
+                        <span className="size-1.5 bg-accent shrink-0 translate-y-0.5" />
+                        <span>{a}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-6 pt-4 border-t border-rule/50">
+                    <p className="mono-label text-foreground/50 text-[10px]">
+                      ATTESTATION SIGNATURE
+                    </p>
+                    <p className="font-mono text-[11px] text-accent/80 mt-1 truncate">
+                      SHA256:8f4e2b09a{node.id}93cf82e01b
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <p className="mono-label">TIMELINE FRAMES · TOUCHING THIS ASSET</p>
-              <span className="mono-label text-xs text-foreground/60">{events.length} EVENTS</span>
-            </div>
-            {events.length === 0 ? (
-              <p className="mt-4 font-serif italic text-foreground/60">
-                No incident frames currently touch this asset directly.
-              </p>
-            ) : (
-              <ol className="mt-4 space-y-3">
-                {events.map((e, i) => {
-                  const evTime =
-                    typeof e.t === "number" && !isNaN(e.t)
-                      ? e.t
-                      : typeof (e as unknown as { time?: number }).time === "number" &&
-                          !isNaN((e as unknown as { time?: number }).time!)
-                        ? (e as unknown as { time?: number }).time!
-                        : 0;
-                  const isBlockedEvent =
-                    e.status === "BLOCKED_AIRGAP" ||
-                    e.status === "PREVENTED_UPSTREAM" ||
-                    e.status === "PATCHED";
+              <div className="p-5 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <p className="mono-label">TIMELINE FRAMES · TOUCHING THIS ASSET</p>
+                  <span className="mono-label text-xs text-foreground/60">
+                    {events.length} EVENTS
+                  </span>
+                </div>
+                {events.length === 0 ? (
+                  <p className="mt-4 font-serif italic text-foreground/60">
+                    No incident frames currently touch this asset directly.
+                  </p>
+                ) : (
+                  <ol className="mt-4 space-y-3">
+                    {events.map((e, i) => {
+                      const evTime =
+                        typeof e.t === "number" && !isNaN(e.t)
+                          ? e.t
+                          : typeof (e as unknown as { time?: number }).time === "number" &&
+                              !isNaN((e as unknown as { time?: number }).time!)
+                            ? (e as unknown as { time?: number }).time!
+                            : 0;
+                      const isBlockedEvent =
+                        e.status === "BLOCKED_AIRGAP" ||
+                        e.status === "PREVENTED_UPSTREAM" ||
+                        e.status === "PATCHED";
 
-                  return (
-                    <li key={i}>
-                      <button
-                        onClick={() => onJump(evTime)}
-                        className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
-                      >
-                        <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
-                          T+{fmt(evTime)}
-                        </span>
-                        <span
-                          className={`size-2.5 ${
-                            e.status === "BLOCKED_AIRGAP"
-                              ? "bg-amber-400"
-                              : e.status === "PREVENTED_UPSTREAM"
-                                ? "bg-sky-400"
-                                : e.status === "PATCHED"
-                                  ? "bg-emerald-400"
-                                  : sevColor(e.sev)
-                          }`}
-                        />
-                        <div className="min-w-0">
-                          <p
-                            className={`font-serif text-sm sm:text-base font-medium truncate ${
-                              isBlockedEvent ? "line-through opacity-70" : ""
-                            }`}
+                      return (
+                        <li key={i}>
+                          <button
+                            onClick={() => onJump(evTime)}
+                            className="w-full text-left grid grid-cols-[4.5rem_auto_minmax(0,1fr)_auto] gap-3 items-center border border-rule p-3 hover:border-accent hover:bg-accent/5 transition-colors group"
                           >
-                            {e.title}
-                          </p>
-                          {e.statusDetail && (
-                            <p className="font-mono text-[11px] text-amber-400/90 truncate">
-                              {e.statusDetail}
-                            </p>
-                          )}
-                        </div>
-                        <span className="mono-label text-xs text-accent opacity-0 group-hover:opacity-100 transition-opacity">
-                          JUMP →
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </div>
+                            <span className="font-mono text-xs text-foreground/60 group-hover:text-accent">
+                              T+{fmt(evTime)}
+                            </span>
+                            <span
+                              className={`size-2.5 ${
+                                e.status === "BLOCKED_AIRGAP"
+                                  ? "bg-amber-400"
+                                  : e.status === "PREVENTED_UPSTREAM"
+                                    ? "bg-sky-400"
+                                    : e.status === "PATCHED"
+                                      ? "bg-emerald-400"
+                                      : sevColor(e.sev)
+                              }`}
+                            />
+                            <div className="min-w-0">
+                              <p
+                                className={`font-serif text-sm sm:text-base font-medium truncate ${
+                                  isBlockedEvent ? "line-through opacity-70" : ""
+                                }`}
+                              >
+                                {e.title}
+                              </p>
+                              {e.statusDetail && (
+                                <p className="font-mono text-[11px] text-amber-400/90 truncate">
+                                  {e.statusDetail}
+                                </p>
+                              )}
+                            </div>
+                            <span className="mono-label text-xs text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                              JUMP →
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer Actions */}

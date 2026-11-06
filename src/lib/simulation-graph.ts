@@ -35,9 +35,11 @@ export interface SimulationGraphState {
   mttdSeconds: number | null;
   mttdFormatted: string;
   mttrHours: number;
+  mttrSeconds: number;
   mttrFormatted: string;
   mwShed: number;
   costMillion: number;
+  costDollars: number;
   costFormatted: string;
   impactLabel: string;
   impactFormatted: string;
@@ -156,6 +158,7 @@ export function evaluateSimulationState(params: {
   choices: Record<string, ChoiceId>;
   isolatedNodes: Set<string>;
   patchedNodes?: Set<string>;
+  controllerOverrides?: Record<string, { param: string; value: number }>;
   firstActionTime?: number | null;
   sector?: SectorId;
   totalTime?: number;
@@ -169,6 +172,7 @@ export function evaluateSimulationState(params: {
     choices,
     isolatedNodes,
     patchedNodes = new Set<string>(),
+    controllerOverrides = {},
     firstActionTime = null,
     sector = "power",
     totalTime = events.length ? events[events.length - 1].t + 60 : 9600,
@@ -215,16 +219,17 @@ export function evaluateSimulationState(params: {
     let statusDetail = "Awaiting timeline timestamp";
 
     if (reachedInTime) {
+      const safeNodeName = ev.node.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase();
       // Check if target is isolated (air-gapped)
       if (isolatedNodes.has(ev.node)) {
         status = "BLOCKED_AIRGAP";
-        statusDetail = `Asset ${ev.node.toUpperCase()} is air-gapped; adversary payload dropped`;
+        statusDetail = `Asset ${safeNodeName} is air-gapped; adversary payload dropped`;
         blockedNodes.add(ev.node);
       }
       // Check if target is already patched
       else if (patchedNodes.has(ev.node)) {
         status = "PATCHED";
-        statusDetail = `Asset ${ev.node.toUpperCase()} has verified integrity patch; exploit failed`;
+        statusDetail = `Asset ${safeNodeName} has verified integrity patch; exploit failed`;
         blockedNodes.add(ev.node);
       }
       // Initial access node (e.g. ews-04 at t=0)
@@ -236,30 +241,47 @@ export function evaluateSimulationState(params: {
       }
       // Subsequent lateral / impact / physics events: Check network reachability
       else {
-        // Check if decision d1 (quarantine historian/HMI) blocks lateral move
-        const d1Choice = choices["d1"];
-        const isPastD1 = ev.t >= 1244;
+        // Dynamically resolve decisions from the scenario
+        const d1 = decisions.find((d) => d.id === "d1") || decisions[0];
+        const d2 = decisions.find((d) => d.id === "d2") || decisions[1];
+        const d3 = decisions.find((d) => d.id === "d3") || decisions[2];
+
+        const d1Choice = d1 ? choices[d1.id] : choices["d1"];
+        const d2Choice = d2 ? choices[d2.id] : choices["d2"];
+        const d3Choice = d3 ? choices[d3.id] : choices["d3"];
+
+        const isPastD1 = d1 ? ev.t >= d1.t : ev.t >= 1244;
+        const isPastD2 = d2 ? ev.t >= d2.t : ev.t >= 6489;
+        const isPastD3 = d3 ? ev.t >= d3.t : ev.t >= 9120;
+
+        const targetNode = nodes.find((n) => n.id === ev.node);
+        const isLevel2OrLower = targetNode ? targetNode.ring >= 2 : false;
+        const isLevel1OrLower = targetNode ? targetNode.ring >= 3 : false;
+        const isFieldLevel = targetNode ? targetNode.ring >= 5 : false;
+
+        // Check if decision d1 (e.g. quarantine historian/HMI) blocks lateral move downstream
         const d1Blocks =
           d1Choice === "ACT" &&
           isPastD1 &&
-          (ev.node === "switch-a" ||
+          (isLevel2OrLower ||
+            ev.node === "switch-a" ||
             ev.node === "plc-3" ||
             ev.node === "plc-7" ||
             ev.node === "sis" ||
             ev.node === "cent" ||
             ev.node === "brk");
 
-        // Check if decision d2 (fail-safe PLC-3) halts controller drift
-        const d2Choice = choices["d2"];
-        const isPastD2 = ev.t >= 6489;
+        // Check if decision d2 (e.g. fail-safe controller) halts controller drift
         const d2Blocks =
-          d2Choice === "ACT" && isPastD2 && (ev.node === "plc-3" || ev.node === "cent");
+          d2Choice === "ACT" &&
+          isPastD2 &&
+          (isLevel1OrLower || ev.node === "plc-3" || ev.node === "cent");
 
-        // Check if decision d3 (manual trip) protects envelope
-        const d3Choice = choices["d3"];
-        const isPastD3 = ev.t >= 9120;
+        // Check if decision d3 (e.g. manual trip/interlock) protects physical envelope
         const d3Blocks =
-          d3Choice === "ACT" && isPastD3 && (ev.node === "cent" || ev.node === "brk");
+          d3Choice === "ACT" &&
+          isPastD3 &&
+          (isFieldLevel || ev.node === "cent" || ev.node === "brk");
 
         if (d1Blocks || d2Blocks || d3Blocks) {
           status = "PREVENTED_UPSTREAM";
@@ -296,6 +318,34 @@ export function evaluateSimulationState(params: {
     });
   });
 
+  // Evaluate immediate lateral enclave protection across the whole topology
+  if (isolatedNodes.size > 0 && compromisedNodes.size > 0) {
+    for (const node of nodes) {
+      if (
+        !compromisedNodes.has(node.id) &&
+        !isolatedNodes.has(node.id) &&
+        !blockedNodes.has(node.id)
+      ) {
+        const reachableBefore = isNodeReachableFromCompromised(
+          node.id,
+          compromisedNodes,
+          edges,
+          new Set(),
+        );
+        const reachableNow = isNodeReachableFromCompromised(
+          node.id,
+          compromisedNodes,
+          edges,
+          isolatedNodes,
+          adj,
+        );
+        if (reachableBefore && !reachableNow) {
+          blockedNodes.add(node.id);
+        }
+      }
+    }
+  }
+
   // Calculate severed edges and active attacking edges for topology rendering
   const severedEdges = new Set<string>();
   const activeAttackingEdges = new Set<string>();
@@ -317,10 +367,21 @@ export function evaluateSimulationState(params: {
     }
   }
 
-  const isContained =
-    (isolatedNodes.size > 0 || actCount > 0) &&
-    !compromisedNodes.has("cent") &&
-    !compromisedNodes.has("brk");
+  const isPhysicalNodeCompromised =
+    nodes.some((n) => n.ring >= 5 && compromisedNodes.has(n.id)) ||
+    compromisedNodes.has("cent") ||
+    compromisedNodes.has("brk");
+
+  const anyControllerCompromised =
+    nodes.some(
+      (n) =>
+        (n.ring === 3 ||
+          n.kind.toLowerCase().includes("controller") ||
+          n.kind.toLowerCase().includes("plc")) &&
+        compromisedNodes.has(n.id),
+    ) || compromisedNodes.has("plc-3");
+
+  const isContained = (isolatedNodes.size > 0 || actCount > 0) && !isPhysicalNodeCompromised;
 
   // =========================================================================
   // REAL & ACCURATE MTTD (Mean Time to Detect)
@@ -342,12 +403,15 @@ export function evaluateSimulationState(params: {
     // Alarms only trigger when anomalous setpoint drift occurs or breaker latches
     if (actCount > 0) {
       const earliestDecision = decisions.find((d) => choices[d.id] === "ACT");
-      const decTime = earliestDecision ? earliestDecision.t : 1244;
+      const d1 = decisions.find((d) => d.id === "d1") || decisions[0];
+      const decTime = earliestDecision ? earliestDecision.t : d1 ? d1.t : 1244;
       mttdSeconds = decTime;
       mttdFormatted = `${(decTime / 60).toFixed(1)}m`;
     } else if (isolatedNodes.size > 0) {
       // Action was taken via isolation
-      mttdSeconds = Math.min(t, 1244);
+      const d1 = decisions.find((d) => d.id === "d1") || decisions[0];
+      const firstDecTime = d1 ? d1.t : 1244;
+      mttdSeconds = Math.min(t, firstDecTime);
       mttdFormatted = `${(mttdSeconds / 60).toFixed(1)}m`;
     } else {
       // Baseline SCADA delay: ~14.0m
@@ -380,7 +444,7 @@ export function evaluateSimulationState(params: {
   }
 
   // Mitigation reductions
-  if (actCount >= 3 || (isolatedNodes.size >= 2 && !compromisedNodes.has("plc-3"))) {
+  if (actCount >= 3 || (isolatedNodes.size >= 2 && !anyControllerCompromised)) {
     mttrHours = Math.max(0.5, mttrHours * 0.25);
   } else if (actCount === 2 || isolatedNodes.size >= 1) {
     mttrHours = Math.max(2.0, mttrHours * 0.55);
@@ -397,7 +461,7 @@ export function evaluateSimulationState(params: {
   let mw = 14;
   let costM = 4.1;
 
-  if (!compromisedNodes.has("brk") && !compromisedNodes.has("cent")) {
+  if (!isPhysicalNodeCompromised) {
     // Physical layer completely protected!
     mw = 0;
     costM = 0.2 + compromisedNodes.size * 0.08;
@@ -436,7 +500,7 @@ export function evaluateSimulationState(params: {
   let narrative =
     "The SCADA console showed nothing wrong until the breaker latched. The twin saw it 14 minutes earlier.";
 
-  if (mw === 0 || actCount >= 3 || (isolatedNodes.size > 0 && !compromisedNodes.has("plc-3"))) {
+  if (mw === 0 || actCount >= 3 || (isolatedNodes.size > 0 && !anyControllerCompromised)) {
     outcomeBranch = "D — CONTAINED";
     dossierId = "001-D";
     narrative =
@@ -473,23 +537,60 @@ export function evaluateSimulationState(params: {
   const phase = Math.min(1, t / totalTime);
   const haiSample = getInterpolatedHaiTelemetry(phase);
 
+  // Check active operator setpoint overrides
+  let overrideFreq: number | null = null;
+  let overridePressure: number | null = null;
+  let overrideBearing: number | null = null;
+  let overrideChlorine: number | null = null;
+  for (const ov of Object.values(controllerOverrides)) {
+    if (ov.param.includes("freq") || ov.param.includes("speed")) overrideFreq = ov.value;
+    else if (ov.param.includes("press")) overridePressure = ov.value;
+    else if (ov.param.includes("temp") || ov.param.includes("bearing")) overrideBearing = ov.value;
+    else if (ov.param.includes("dose") || ov.param.includes("chlorine"))
+      overrideChlorine = ov.value;
+  }
+
   // Rotor Frequency (Hz): Nominal 50.0 Hz; Alarm > 52.5 Hz
-  const plc3Compromised = compromisedNodes.has("plc-3");
-  const speedDrift = plc3Compromised ? phase * 2.8 * physicsMul : phase * 0.1 * physicsMul;
-  // Blend baseline frequency with HAI dataset curve
-  const speedHz = haiSample.frequencyHz - 10.0 + Math.sin(t / 40) * 0.15 + speedDrift;
+  const speedDrift = anyControllerCompromised ? phase * 2.8 * physicsMul : phase * 0.1 * physicsMul;
+  // Blend baseline frequency with HAI dataset curve or enforce setpoint override
+  let speedHz = haiSample.frequencyHz - 10.0 + Math.sin(t / 40) * 0.15 + speedDrift;
+  if (overrideFreq !== null) {
+    speedHz = overrideFreq + Math.sin(t / 40) * 0.05;
+  }
 
   // Bearing Temperature (°C): Nominal 62.0 °C; Alarm > 95.0 °C
-  const centCompromised = compromisedNodes.has("cent") || (plc3Compromised && phase > 0.6);
-  const bearingDrift = centCompromised ? phase * 42 * physicsMul : phase * 3 * physicsMul;
-  const bearingC = haiSample.temperatureC + 20.2 + bearingDrift + Math.sin(t / 12) * 0.8;
+  const anyActuatorCompromised =
+    nodes.some((n) => n.ring >= 5 && compromisedNodes.has(n.id)) || compromisedNodes.has("cent");
+  const bearingCompromised = anyActuatorCompromised || (anyControllerCompromised && phase > 0.6);
+  const bearingDrift = bearingCompromised ? phase * 42 * physicsMul : phase * 3 * physicsMul;
+  let bearingC = haiSample.temperatureC + 20.2 + bearingDrift + Math.sin(t / 12) * 0.8;
+  if (overrideBearing !== null) {
+    bearingC = overrideBearing + Math.sin(t / 12) * 0.2;
+  }
 
   // Feeder Pressure (bar): Nominal 8.2 bar; Alarm < 7.0 bar
-  const brkCompromised = compromisedNodes.has("brk") || compromisedNodes.has("plc-7");
-  const pressureDrop = brkCompromised ? phase * 1.8 * physicsMul : phase * 0.05 * physicsMul;
-  const pressure = haiSample.pressureBar + 5.72 - pressureDrop + Math.sin(t / 18) * 0.04;
+  const anyBreakerOrPumpCompromised =
+    nodes.some(
+      (n) =>
+        (n.ring >= 4 ||
+          n.kind.toLowerCase().includes("pump") ||
+          n.kind.toLowerCase().includes("breaker")) &&
+        compromisedNodes.has(n.id),
+    ) ||
+    compromisedNodes.has("brk") ||
+    compromisedNodes.has("plc-7");
+  const pressureDrop = anyBreakerOrPumpCompromised
+    ? phase * 1.8 * physicsMul
+    : phase * 0.05 * physicsMul;
+  let pressure = haiSample.pressureBar + 5.72 - pressureDrop + Math.sin(t / 18) * 0.04;
+  if (overridePressure !== null) {
+    pressure = overridePressure + Math.sin(t / 18) * 0.02;
+  }
 
-  const chlorinePpm = sector === "water" ? haiSample.chlorinePpm : 2.0;
+  let chlorinePpm = sector === "water" ? haiSample.chlorinePpm : 2.0;
+  if (overrideChlorine !== null) {
+    chlorinePpm = overrideChlorine;
+  }
 
   return {
     t,
@@ -505,9 +606,11 @@ export function evaluateSimulationState(params: {
     mttdSeconds,
     mttdFormatted,
     mttrHours,
+    mttrSeconds: Math.round(mttrHours * 3600),
     mttrFormatted,
     mwShed: mw,
     costMillion: costM,
+    costDollars: Math.round(costM * 1_000_000),
     costFormatted,
     impactLabel: sectorImpact.label,
     impactFormatted,

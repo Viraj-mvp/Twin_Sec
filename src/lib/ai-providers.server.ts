@@ -46,6 +46,7 @@ export function hasValidKeys(): boolean {
   return Boolean(
     process.env.GROQ_API_KEY ||
     process.env.GEMINI_API_KEY ||
+    process.env.CEREBRAS_API_KEY ||
     process.env.OPENROUTER_API_KEY ||
     process.env.OLLAMA_BASE_URL,
   );
@@ -113,7 +114,10 @@ export function getFallbackProvider() {
 }
 
 export function getOllamaProvider() {
-  const baseURL = process.env.OLLAMA_BASE_URL || "http://localhost:11434/v1";
+  const host = process.env.OLLAMA_HOST || "127.0.0.1";
+  const port = process.env.OLLAMA_PORT || "11434";
+  const defaultBaseUrl = `http://${host}:${port}/v1`;
+  const baseURL = process.env.OLLAMA_BASE_URL || defaultBaseUrl;
   const model = process.env.OLLAMA_MODEL || "qwen2.5:7b";
   return {
     provider: createOpenAICompatible({
@@ -126,8 +130,28 @@ export function getOllamaProvider() {
   };
 }
 
+export function getCerebrasProvider() {
+  const apiKey = process.env.CEREBRAS_API_KEY;
+  if (!apiKey) {
+    throw new AIUnavailableError(
+      "cerebras_fallback",
+      new Error("CEREBRAS_API_KEY is not configured"),
+    );
+  }
+  return {
+    provider: createOpenAICompatible({
+      name: "cerebras",
+      baseURL: process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    }),
+    model: "llama-3.3-70b",
+    maxTokens: 2000,
+  };
+}
+
 function getFallbackProviders(): Array<ReturnType<typeof getProviderForTask>> {
   const list: Array<ReturnType<typeof getProviderForTask>> = [];
+  if (process.env.CEREBRAS_API_KEY) list.push(getCerebrasProvider());
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (apiKey) list.push(getFallbackProvider());
   if (process.env.OLLAMA_BASE_URL) list.push(getOllamaProvider());

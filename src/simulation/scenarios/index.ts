@@ -8,16 +8,17 @@
 import type { SectorId } from "@/data/scenarios";
 import type { AttackScenario } from "./types";
 import { POWER_SCENARIO } from "./power";
-import { WATER_SCENARIO } from "./water";
-import { RANSOMWARE_SCENARIO } from "./ransomware";
-import { PHISHING_SCENARIO } from "./phishing";
-import { DDOS_SCENARIO } from "./ddos";
-import { INSIDER_SCENARIO } from "./insider";
+import { WATER_SCENARIO, WATER_TWIN_ATTACK_SEQUENCE } from "./water";
+import { RANSOMWARE_SCENARIO } from "./manufacturing";
+import { PHISHING_SCENARIO } from "./oil-gas";
+import { DDOS_SCENARIO } from "./smart-city";
+import { INSIDER_SCENARIO } from "./smart-building";
 
 export * from "./types";
 export {
   POWER_SCENARIO,
   WATER_SCENARIO,
+  WATER_TWIN_ATTACK_SEQUENCE,
   RANSOMWARE_SCENARIO,
   PHISHING_SCENARIO,
   DDOS_SCENARIO,

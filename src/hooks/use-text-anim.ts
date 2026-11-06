@@ -73,21 +73,21 @@ export function useSplitCharReveal<
       ctx = gsap.context(() => {
         gsap.fromTo(
           chars,
-          { yPercent: 120, opacity: 0, rotate: 8, skewY: 6 },
+          { yPercent: 15, opacity: 0.3 },
           {
             yPercent: 0,
             opacity: 1,
             rotate: 0,
             skewY: 0,
-            duration: 0.9,
-            ease: "expo.out",
-            stagger: { each: 0.015, from: "start" },
+            duration: 0.25,
+            ease: "power2.out",
+            stagger: { each: 0.004, from: "start" },
             delay: 0,
             scrollTrigger: initiallyInView
               ? undefined
               : {
                   trigger: el,
-                  start: "top 90%",
+                  start: "top 95%",
                   once: true,
                 },
           },
@@ -128,7 +128,7 @@ export function useScrambleReveal<T extends HTMLElement = HTMLElement>(): RefObj
     const scramble = () => {
       if (isScrambling) return;
       isScrambling = true;
-      const duration = 1000; // 1s cybernetic scramble
+      const duration = 200; // Snappy 200ms cybernetic scramble
       const start = performance.now();
       const tick = (now: number) => {
         const p = Math.min(1, (now - start) / duration);
@@ -221,20 +221,19 @@ export function useWordReveal<T extends HTMLElement = HTMLElement>(): RefObject<
       ctx = gsap.context(() => {
         gsap.fromTo(
           spans,
-          { y: 20, opacity: 0, filter: "blur(4px)" },
+          { y: 8, opacity: 0.4 },
           {
             y: 0,
             opacity: 1,
-            filter: "blur(0px)",
-            duration: 0.6,
-            ease: "power3.out",
-            stagger: 0.02,
+            duration: 0.22,
+            ease: "power2.out",
+            stagger: 0.005,
             delay: 0,
             scrollTrigger: initiallyInView
               ? undefined
               : {
                   trigger: el,
-                  start: "top 92%",
+                  start: "top 95%",
                   once: true,
                 },
           },

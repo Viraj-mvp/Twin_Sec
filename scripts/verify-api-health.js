@@ -1,9 +1,16 @@
+/* eslint-disable no-console -- This is a CLI diagnostic script; console output is its primary purpose */
 import fs from "fs";
 import path from "path";
 
 // Simple .env parser for standalone Node scripts
+// SECURITY: .env path is validated to stay within process.cwd() to prevent path traversal
 function loadEnv() {
-  const envPath = path.resolve(process.cwd(), ".env");
+  const cwd = process.cwd();
+  const envPath = path.resolve(cwd, ".env");
+  if (!envPath.startsWith(cwd)) {
+    console.error("  ✕ FAIL: .env path escapes working directory");
+    return;
+  }
   if (fs.existsSync(envPath)) {
     const content = fs.readFileSync(envPath, "utf8");
     content.split("\n").forEach((line) => {
@@ -105,7 +112,8 @@ async function runDiagnostics() {
   aiKeys.forEach((key) => {
     const val = process.env[key];
     if (val && !val.includes("your_")) {
-      console.log(`  ✓ ${key}: Present & Initialized (${val.substring(0, 8)}...)`);
+      // SECURITY: Only expose first 4 chars of API key to avoid partial key exposure
+      console.log(`  ✓ ${key}: Present & Initialized (${val.substring(0, 4)}****)`);
       passes++;
     } else {
       console.log(`  ! ${key}: Unset or using placeholder (AI Gateway will fallback dynamically)`);
@@ -138,6 +146,7 @@ async function runDiagnostics() {
     process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
   );
 
+  // SECURITY: These are intentional health-check pings to the approved AI gateway endpoints configured in .env
   await checkEndpoint(
     "Google Gemini AI Cloud Gateway",
     process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai",

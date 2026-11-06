@@ -13,11 +13,13 @@ import {
   FolderLock,
 } from "lucide-react";
 import { loginOperator } from "@/lib/api/auth.functions";
+import { syncGuestTrainingRuns } from "@/lib/api/training.functions";
+import { getGuestRuns, clearGuestRuns } from "@/lib/guest-store";
 import { saveLocalSession } from "@/lib/auth-store";
 import { useOperator } from "@/contexts/OperatorContext";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
-import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
-import { CyberRadarCanvas } from "@/components/CyberRadarCanvas";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
+import { CyberNetworkCanvas } from "@/components/canvas/CyberNetworkCanvas";
+import { CyberRadarCanvas } from "@/components/canvas/CyberRadarCanvas";
 import { log } from "@/lib/logger";
 
 export const Route = createFileRoute("/login")({
@@ -83,10 +85,15 @@ function LoginPage() {
   // Redirect ONLY when loading is finished AND session is authenticated.
   useEffect(() => {
     if (!loading && activeSession.loggedIn) {
-      const dest =
-        from && typeof from === "string" && !from.includes("/login") && !from.includes("/signup")
-          ? from
-          : "/dashboard";
+      const isValidRelativePath = (url: unknown): url is string =>
+        typeof url === "string" &&
+        url.startsWith("/") &&
+        !url.startsWith("//") &&
+        !url.includes("://") &&
+        !url.includes("/login") &&
+        !url.includes("/signup");
+
+      const dest = isValidRelativePath(from) ? from : "/dashboard";
       navigate({ to: dest as never });
     }
   }, [loading, activeSession.loggedIn, navigate, from]);
@@ -129,6 +136,17 @@ function LoginPage() {
         clearance: authSession.operator.clearance || "TS/SCI · RED LEVEL",
         loggedIn: true,
       });
+
+      // Claim & sync any existing local guest runs to the newly authenticated operator
+      try {
+        const localRuns = getGuestRuns();
+        if (localRuns.length > 0) {
+          await syncGuestTrainingRuns({ data: { runs: localRuns } });
+          clearGuestRuns();
+        }
+      } catch (e) {
+        log.error("Failed to sync guest runs on operator login:", e);
+      }
 
       await refresh();
       const dest =
@@ -332,7 +350,7 @@ function LoginPage() {
             ← RETURN TO LANDING
           </button>
           <span className="bg-black text-[#F5F3E7] px-2 py-0.5 border border-black font-black">
-            TWINSEC v1
+            TWINSEC v1.0.0
           </span>
         </footer>
       </main>

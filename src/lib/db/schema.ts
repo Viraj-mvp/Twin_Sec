@@ -12,6 +12,7 @@ export const operators = sqliteTable("operators", {
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("operator"), // 'operator' | 'instructor' | 'admin'
   emailConfirmed: integer("email_confirmed", { mode: "boolean" }).notNull().default(true),
+  preferencesJson: text("preferences_json"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -125,8 +126,129 @@ export const simulationScenarios = sqliteTable("simulation_scenarios", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+// ── LEADERBOARD ENTRIES ───────────────────────────────────────────────────
+export const leaderboardEntries = sqliteTable("leaderboard_entries", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  operatorId: text("operator_id").references(() => operators.id, { onDelete: "set null" }),
+  callsign: text("callsign").notNull(),
+  trainingRunId: text("training_run_id").references(() => trainingRuns.id, { onDelete: "cascade" }),
+  sector: text("sector").notNull(),
+  adversary: text("adversary").notNull(),
+  score: integer("score").notNull().default(0),
+  mwShed: real("mw_shed").notNull().default(0),
+  mttd: integer("mttd").notNull().default(0),
+  mttr: integer("mttr").notNull().default(0),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── MITRE ATT&CK FOR ICS TECHNIQUES ───────────────────────────────────────
+export const mitreTechniques = sqliteTable("mitre_techniques", {
+  id: text("id").primaryKey(), // STIX ID e.g. attack-pattern--...
+  externalId: text("external_id").notNull().unique(), // e.g. T0855, T1692.001
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  tacticsJson: text("tactics_json").notNull().default("[]"),
+  platformsJson: text("platforms_json").notNull().default("[]"),
+  mitigationsJson: text("mitigations_json").default("[]"),
+  isSubtechnique: integer("is_subtechnique", { mode: "boolean" }).notNull().default(false),
+  isRevoked: integer("is_revoked", { mode: "boolean" }).notNull().default(false),
+  revokedBy: text("revoked_by"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── OTCAD HISTORICAL ICS CYBER INCIDENTS ──────────────────────────────────
+export const otcadIncidents = sqliteTable("otcad_incidents", {
+  id: text("id").primaryKey(), // GUID
+  name: text("name").notNull(),
+  year: integer("year").notNull(),
+  industry: text("industry").notNull(),
+  attackType: text("attack_type").notNull(),
+  sourcesJson: text("sources_json").notNull().default("[]"),
+  targetComponent: text("target_component"),
+  mitreTactic: text("mitre_tactic"),
+  consequence: text("consequence"),
+  severity: text("severity").notNull().default("HIGH"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── HAI ICS GROUND TRUTH ATTACK PERIODS ────────────────────────────────────
+export const haiAttackPeriods = sqliteTable("hai_attack_periods", {
+  id: text("id").primaryKey(),
+  attackIndex: integer("attack_index").notNull().unique(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  durationSeconds: integer("duration_seconds").notNull(),
+  durationFormatted: text("duration_formatted").notNull(),
+  affectedProcess: text("affected_process").notNull(),
+  description: text("description").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── EXPERIMENTS ──────────────────────────────────────────────────────────
+export const experiments = sqliteTable("experiments", {
+  id: text("id").primaryKey(),
+  scenarioId: text("scenario_id").notNull(),
+  seed: integer("seed").notNull(),
+  status: text("status").notNull().default("RUNNING"),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time"),
+  metricsJson: text("metrics_json"),
+  configJson: text("config_json"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── SIMULATION EVENTS ────────────────────────────────────────────────────
+export const simulationEvents = sqliteTable("simulation_events", {
+  id: text("id").primaryKey(),
+  experimentId: text("experiment_id"),
+  timestamp: real("timestamp").notNull(),
+  type: text("type").notNull(),
+  sourceAssetId: text("source_asset_id").notNull(),
+  targetAssetId: text("target_asset_id"),
+  severity: text("severity").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  dataJson: text("data_json"),
+  beforeStateJson: text("before_state_json"),
+  afterStateJson: text("after_state_json"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ── SIMULATION SNAPSHOTS ─────────────────────────────────────────────────
+export const simulationSnapshots = sqliteTable("simulation_snapshots", {
+  id: text("id").primaryKey(),
+  experimentId: text("experiment_id").notNull(),
+  time: real("time").notNull(),
+  stateJson: text("state_json").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 // ── TYPE EXPORTS ──────────────────────────────────────────────────────────
 export type Operator = typeof operators.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type TrainingRun = typeof trainingRuns.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type LeaderboardEntry = typeof leaderboardEntries.$inferSelect;
+export type MitreTechniqueRow = typeof mitreTechniques.$inferSelect;
+export type OtcadIncidentRow = typeof otcadIncidents.$inferSelect;
+export type HaiAttackPeriodRow = typeof haiAttackPeriods.$inferSelect;
+export type ExperimentRow = typeof experiments.$inferSelect;
+export type SimulationEventRow = typeof simulationEvents.$inferSelect;
+export type SimulationSnapshotRow = typeof simulationSnapshots.$inferSelect;

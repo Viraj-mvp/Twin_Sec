@@ -1,9 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useOperator } from "@/contexts/OperatorContext";
 import { getTrainingRuns, getTrainingStats } from "@/lib/api/training.functions";
 import { exportDebriefPDF, exportSIEMLog } from "@/lib/api/export.functions";
+import { getGuestRuns, canGuestDownloadPdf, recordGuestPdfDownload } from "@/lib/guest-store";
+import { Trophy } from "lucide-react";
 import { log } from "@/lib/logger";
+import DOMPurify from "dompurify";
 
 interface DebriefReportData {
   metadata?: {
@@ -100,54 +103,46 @@ function TrainingLedgerPage() {
 
     const loadData = async () => {
       setDataLoading(true);
-      if (operator?.loggedIn) {
-        try {
-          const runsData = await getTrainingRuns();
-          const statsData = await getTrainingStats();
+      try {
+        const [runsData, statsData] = await Promise.all([getTrainingRuns(), getTrainingStats()]);
 
-          // Map to local record interface
-          const mappedRuns: ExerciseRecord[] = runsData.map((r) => ({
-            id: r.id,
-            timestamp: r.timestamp,
-            sector: r.sector,
-            adversary: r.adversary,
-            branch: r.branch,
-            mwShed: r.mwShed,
-            mttd: r.mttd,
-            mttr: r.mttr,
-            cost: r.cost,
-            score: r.score,
-            shareUrl: r.shareUrl,
-          }));
+        const mappedDbRuns: ExerciseRecord[] = (runsData || []).map((r) => ({
+          id: r.id,
+          timestamp: r.timestamp,
+          sector: r.sector,
+          adversary: r.adversary,
+          branch: r.branch,
+          mwShed: r.mwShed,
+          mttd: r.mttd || "30s",
+          mttr: r.mttr || "120s",
+          cost: r.cost || "$100k",
+          score: r.score,
+          shareUrl: r.shareUrl,
+        }));
 
-          setRecords(mappedRuns);
-          setStats(statsData);
-        } catch (e) {
-          log.error("Failed to load db training data", e);
-        }
-      } else {
-        // Guest mode - localStorage fallback
-        try {
-          const raw = localStorage.getItem("twinsec-ledger");
-          if (raw) {
-            const localRuns: ExerciseRecord[] = JSON.parse(raw);
-            setRecords(localRuns);
+        const guestRuns = getGuestRuns().map((r) => ({
+          id: r.id,
+          timestamp: r.createdAt || r.timestamp,
+          sector: r.sector,
+          adversary: r.adversary,
+          branch: r.branch,
+          mwShed: r.mwShed,
+          mttd: r.mttd || "30s",
+          mttr: r.mttr || "120s",
+          cost: r.cost || "$100k",
+          score: r.score,
+          shareUrl: r.shareUrl,
+        }));
 
-            const total = localRuns.length;
-            const scoreSum = localRuns.reduce((acc, r) => acc + r.score, 0);
-            const mwSum = localRuns.reduce((acc, r) => acc + r.mwShed, 0);
-            const maxScore = total > 0 ? Math.max(...localRuns.map((r) => r.score)) : 0;
+        // Merge local runs (newest first) avoiding duplicates
+        const existingIds = new Set(mappedDbRuns.map((r) => r.id));
+        const filteredLocal = guestRuns.filter((r) => !existingIds.has(r.id));
+        const combined = [...filteredLocal, ...mappedDbRuns];
 
-            setStats({
-              totalRuns: total,
-              avgScore: total > 0 ? Math.round(scoreSum / total) : 0,
-              avgMwsShed: total > 0 ? (mwSum / total).toFixed(1) : "0.0",
-              bestScore: maxScore,
-            });
-          }
-        } catch (e) {
-          log.error("Error reading local training ledger", e);
-        }
+        setRecords(combined);
+        setStats(statsData);
+      } catch (e) {
+        log.error("Failed to load training data:", e);
       }
       setDataLoading(false);
     };
@@ -160,7 +155,24 @@ function TrainingLedgerPage() {
     setDebriefLoading(true);
     try {
       const data = await exportDebriefPDF({ data: { trainingRunId: runId } });
-      setDebriefData(data);
+      const safeData = {
+        ...data,
+        redTeamReport: {
+          ...data.redTeamReport,
+          initialAccessVector: DOMPurify.sanitize(data.redTeamReport?.initialAccessVector || ""),
+          tacticsUsed: (data.redTeamReport?.tacticsUsed || []).map((t: string) =>
+            DOMPurify.sanitize(t),
+          ),
+          breachOutcome: DOMPurify.sanitize(data.redTeamReport?.breachOutcome || ""),
+        },
+        blueTeamReport: {
+          ...data.blueTeamReport,
+          recommendations: (data.blueTeamReport?.recommendations || []).map((r: string) =>
+            DOMPurify.sanitize(r),
+          ),
+        },
+      };
+      setDebriefData(safeData);
     } catch (err) {
       log.error("Failed to fetch debrief PDF metadata", err);
       // Local fallback debrief object
@@ -205,6 +217,11 @@ function TrainingLedgerPage() {
   };
 
   const handleDownloadSIEM = async (runId: string, format: "CEF" | "SYSLOG" | "JSON") => {
+    if (!operator?.loggedIn) {
+      setSiemExportStatus("SIGN-IN REQUIRED FOR SIEM LOGS");
+      setTimeout(() => setSiemExportStatus(null), 3500);
+      return;
+    }
     try {
       setSiemExportStatus(`Generating ${format}...`);
       const result = await exportSIEMLog({ data: { trainingRunId: runId, format } });
@@ -483,6 +500,15 @@ function TrainingLedgerPage() {
                         >
                           SYSLOG
                         </button>
+
+                        <Link
+                          to="/leaderboard/submit"
+                          className="bg-[#0a200a] border border-accent text-accent px-2 py-1 hover:bg-accent hover:text-black transition-colors text-[11px] font-bold flex items-center gap-1"
+                          title="Commit to Global Leaderboard"
+                        >
+                          <Trophy className="size-3 stroke-[2.5]" />
+                          <span>RANK</span>
+                        </Link>
                       </div>
                     </td>
                   </tr>
@@ -507,10 +533,26 @@ function TrainingLedgerPage() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="bg-accent text-accent-foreground font-bold px-4 py-2 hover:opacity-90 transition-opacity"
+                  onClick={() => {
+                    if (!operator?.loggedIn) {
+                      if (!canGuestDownloadPdf()) {
+                        alert(
+                          "GUEST QUOTA EXCEEDED: 1 sample PDF export is allowed for unauthenticated guests. Please sign in or initialize a dossier for unlimited official PDF debrief reports.",
+                        );
+                        return;
+                      }
+                      recordGuestPdfDownload();
+                    }
+                    window.print();
+                  }}
+                  className="bg-accent text-accent-foreground font-bold px-4 py-2 hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
-                  🖨️ PRINT / SAVE PDF
+                  <span>🖨️ PRINT / SAVE PDF</span>
+                  {!operator?.loggedIn && (
+                    <span className="text-[10px] bg-black text-accent px-1.5 py-0.5 ml-1">
+                      {canGuestDownloadPdf() ? "1 FREE SAMPLE" : "SIGN-IN REQ"}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => {

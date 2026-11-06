@@ -61,7 +61,7 @@ function DefconBrief() {
         <div className="absolute top-6 left-6 right-6 flex justify-between mono-label z-10">
           <button
             type="button"
-            onClick={(e) => handleSmartBack(e)}
+            onClick={(e) => handleSmartBack(e, "/briefings")}
             className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
           >
             ← RETURN

@@ -1,14 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { db } from "../db/db";
-import { trainingRuns, auditLogs } from "../db/schema";
-import { eq } from "drizzle-orm";
-import { getSessionCookie } from "../auth.server";
+import { getAuthOperatorId, logAudit, updateRunHint } from "../server-helpers.server";
 import { generateText } from "ai";
+import { scrubContent, detectPromptInjection } from "../safety-scrub";
 import { callAI, AIUnavailableError } from "../ai-providers.server";
-import { scrubContent, detectPromptInjection } from "./enhanced-simulation.functions";
-import { EXERCISES } from "@/data/scenarios";
-import type { SectorId } from "@/data/scenarios";
+import { EXERCISES, type SectorId } from "@/data/scenarios";
+
 import {
   buildRoleBriefingSystemPrompt,
   buildPhaseGuidanceSystemPrompt,
@@ -72,33 +69,6 @@ const GenerateDiagnosticQuestionsInput = z.object({
 });
 
 // ── Shared helpers ─────────────────────────────────────────────────
-async function getAuthOperatorId() {
-  const token = getSessionCookie();
-  if (!token) return null;
-  const session = await db.query.sessions.findFirst({
-    where: (fields) => eq(fields.token, token),
-  });
-  if (!session || new Date(session.expiresAt) < new Date()) return null;
-  return session.operatorId;
-}
-
-async function logAudit(
-  trainingRunId: string | null | undefined,
-  eventType: string,
-  details: unknown,
-  operatorId: string | null = null,
-) {
-  const validRunId = trainingRunId && trainingRunId !== "none" ? trainingRunId : undefined;
-  await db.insert(auditLogs).values({
-    id: crypto.randomUUID(),
-    trainingRunId: validRunId,
-    operatorId: operatorId ?? undefined,
-    timestamp: new Date().toISOString(),
-    eventType,
-    details: JSON.stringify(details),
-  });
-}
-
 function safeJsonParse<T>(text: string, fallback: T): T {
   try {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -407,13 +377,7 @@ export const generateContextHint = createServerFn({ method: "POST" })
         },
         operatorId,
       );
-      await db
-        .update(trainingRuns)
-        .set({
-          hintLevel: nextHintLevel,
-          lastHintHash: finalHash,
-        })
-        .where(eq(trainingRuns.id, data.trainingRunId));
+      await updateRunHint(data.trainingRunId, nextHintLevel, finalHash);
     }
 
     return {

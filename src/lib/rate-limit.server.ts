@@ -21,15 +21,54 @@ interface Bucket {
 
 const store = new Map<string, Bucket>();
 
+import { getRequestHeader } from "@tanstack/react-start/server";
+
+const IPV4_REGEX =
+  /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)){3}$/;
+const IPV6_REGEX = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$/;
+
+function isValidIp(ip: string): boolean {
+  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
+}
+
+export function getClientIp(): string {
+  try {
+    const cf = getRequestHeader("cf-connecting-ip");
+    if (cf && isValidIp(cf.trim())) return cf.trim();
+
+    const real = getRequestHeader("x-real-ip");
+    if (real && isValidIp(real.trim())) return real.trim();
+
+    const forwarded = getRequestHeader("x-forwarded-for");
+    if (forwarded) {
+      const candidates = forwarded
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .reverse(); // scan right-to-left: closest trusted reverse proxy hop
+      for (const ip of candidates) {
+        if (isValidIp(ip)) {
+          return ip;
+        }
+      }
+    }
+  } catch {
+    // Outside request context
+  }
+  return "127.0.0.1";
+}
+
 export function checkRateLimit(
   key: string,
   limit: RateLimit,
 ): { limited: boolean; allowed: boolean; remaining: number; reset: number; resetAt: number } {
   const now = Date.now();
 
-  // Evict expired buckets so the store can't leak memory.
-  for (const [k, v] of Array.from(store.entries())) {
-    if (now > v.resetAt) store.delete(k);
+  // Evict expired buckets when store grows to avoid memory leak
+  if (store.size > 50) {
+    for (const [k, v] of store.entries()) {
+      if (now > v.resetAt) store.delete(k);
+    }
   }
 
   let bucket = store.get(key);

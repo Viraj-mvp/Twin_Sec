@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- This is a CLI diagnostic script; console output is its primary purpose */
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
@@ -34,6 +35,14 @@ try {
     console.error("  ✕ ERROR: 'simulation_scenarios' table missing");
     errors++;
   }
+  if (!tableNames.includes("leaderboard_entries")) {
+    console.error("  ✕ ERROR: 'leaderboard_entries' table missing");
+    errors++;
+  }
+  if (!tableNames.includes("audit_logs")) {
+    console.error("  ✕ ERROR: 'audit_logs' table missing");
+    errors++;
+  }
   db.close();
 } catch (err) {
   console.error(`  ✕ Database connection failed: ${err.message}`);
@@ -45,7 +54,13 @@ console.log("\n[2/4] Checking Facility & Schematic Image Assets...");
 const assetsDir = path.resolve(process.cwd(), "src", "assets");
 const requiredAssets = [
   "facility.jpg",
-  "schematic.jpg",
+  "schematic-power.jpg",
+  "schematic-water.jpg",
+  "schematic-refinery.jpg",
+  "schematic-manufacturing.jpg",
+  "schematic-port.jpg",
+  "schematic-building.jpg",
+  "schematic-smartcity.jpg",
   "power.jpg",
   "water.jpg",
   "oil-gas.jpg",

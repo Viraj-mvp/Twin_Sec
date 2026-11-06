@@ -53,12 +53,32 @@ function downloadFile(content: string, filename: string, contentType: string) {
 }
 
 /**
+ * Encodes special characters to prevent HTML/Stored XSS injection.
+ */
+function escapeHtml(str: unknown): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
  * Exports current run ledger data as raw structured JSON.
  */
 export function exportRunLedgerJSON(data: RunLedgerData) {
   const jsonStr = JSON.stringify(data, null, 2);
   const filename = `twinsec_ledger_${data.sector}_${Date.now()}.json`;
   downloadFile(jsonStr, filename, "application/json");
+}
+
+// SECURITY: Sanitize CSV fields to prevent formula injection in spreadsheet applications
+function sanitizeCsvField(val: string | number): string {
+  const s = String(val);
+  if (/^[=+\-@\t\r]/.test(s)) return `'${s}`;
+  return s;
 }
 
 /**
@@ -117,11 +137,11 @@ export function exportRunLedgerCSV(data: RunLedgerData) {
   data.activeEvents.forEach((ev) => {
     rows.push([
       String(ev.t),
-      ev.node,
-      ev.sev,
-      `"${ev.title.replace(/"/g, '""')}"`,
-      ev.status,
-      `"${ev.statusDetail.replace(/"/g, '""')}"`,
+      sanitizeCsvField(ev.node),
+      sanitizeCsvField(ev.sev),
+      `"${sanitizeCsvField(ev.title.replace(/"/g, '""'))}"`,
+      sanitizeCsvField(ev.status),
+      `"${sanitizeCsvField(ev.statusDetail.replace(/"/g, '""'))}"`,
     ]);
   });
 
@@ -240,41 +260,41 @@ export function exportRunLedgerReport(data: RunLedgerData) {
 <body>
   <div class="header">
     <div class="title">TWINSEC // EXERCISE INCIDENT DEBRIEF DOSSIER</div>
-    <div class="subtitle">CONFIDENTIAL · OPERATIONAL TECHNOLOGY INCIDENT AUDIT LEDGER · SECTOR: ${data.sector.toUpperCase()}</div>
+    <div class="subtitle">CONFIDENTIAL · OPERATIONAL TECHNOLOGY INCIDENT AUDIT LEDGER · SECTOR: ${escapeHtml(data.sector.toUpperCase())}</div>
   </div>
 
   <div class="grid">
     <div class="card">
       <div class="card-label">CONTAINMENT BRANCH</div>
-      <div class="card-val">${data.metrics.outcomeBranch}</div>
+      <div class="card-val">${escapeHtml(data.metrics.outcomeBranch)}</div>
     </div>
     <div class="card">
       <div class="card-label">MITIGATION SCORE</div>
-      <div class="card-val">${data.metrics.score}%</div>
+      <div class="card-val">${escapeHtml(data.metrics.score)}%</div>
     </div>
     <div class="card">
       <div class="card-label">MTTD / MTTR</div>
-      <div class="card-val" style="font-size: 18px;">${data.metrics.mttdFormatted} / ${data.metrics.mttrFormatted}</div>
+      <div class="card-val" style="font-size: 18px;">${escapeHtml(data.metrics.mttdFormatted)} / ${escapeHtml(data.metrics.mttrFormatted)}</div>
     </div>
     <div class="card">
       <div class="card-label">ESTIMATED COST</div>
-      <div class="card-val">${data.metrics.costFormatted}</div>
+      <div class="card-val">${escapeHtml(data.metrics.costFormatted)}</div>
     </div>
   </div>
 
   <h2>Run Parameters</h2>
   <table>
     <tr><th>Parameter</th><th>Value</th></tr>
-    <tr><td>Run Identifier</td><td>${data.runId}</td></tr>
-    <tr><td>Execution Timestamp</td><td>${data.timestamp}</td></tr>
-    <tr><td>Target Sector</td><td>${data.sector.toUpperCase()}</td></tr>
-    <tr><td>Adversary Group</td><td>${data.adversary}</td></tr>
-    <tr><td>Exercise Role</td><td>${data.role}</td></tr>
-    <tr><td>Air-Gapped Isolated Assets</td><td>${data.isolatedNodes.join(", ") || "None"}</td></tr>
-    <tr><td>Firmware Patched Assets</td><td>${data.patchedNodes.join(", ") || "None"}</td></tr>
+    <tr><td>Run Identifier</td><td>${escapeHtml(data.runId)}</td></tr>
+    <tr><td>Execution Timestamp</td><td>${escapeHtml(data.timestamp)}</td></tr>
+    <tr><td>Target Sector</td><td>${escapeHtml(data.sector.toUpperCase())}</td></tr>
+    <tr><td>Adversary Group</td><td>${escapeHtml(data.adversary)}</td></tr>
+    <tr><td>Exercise Role</td><td>${escapeHtml(data.role)}</td></tr>
+    <tr><td>Air-Gapped Isolated Assets</td><td>${escapeHtml(data.isolatedNodes.join(", ") || "None")}</td></tr>
+    <tr><td>Firmware Patched Assets</td><td>${escapeHtml(data.patchedNodes.join(", ") || "None")}</td></tr>
   </table>
 
-  <h2>Executed Kali Terminal Commands (${data.terminalCommands.length})</h2>
+  <h2>Executed Kali Terminal Commands (${escapeHtml(data.terminalCommands.length)})</h2>
   <table>
     <thead><tr><th>#</th><th>Command String</th></tr></thead>
     <tbody>
@@ -282,13 +302,13 @@ export function exportRunLedgerReport(data: RunLedgerData) {
         data.terminalCommands.length === 0
           ? '<tr><td colspan="2" style="color: #64748b; text-align: center;">No terminal commands executed during run</td></tr>'
           : data.terminalCommands
-              .map((cmd, i) => `<tr><td>${i + 1}</td><td><code>${cmd}</code></td></tr>`)
+              .map((cmd, i) => `<tr><td>${i + 1}</td><td><code>${escapeHtml(cmd)}</code></td></tr>`)
               .join("")
       }
     </tbody>
   </table>
 
-  <h2>Scenario Event Execution Log (${data.activeEvents.length})</h2>
+  <h2>Scenario Event Execution Log (${escapeHtml(data.activeEvents.length)})</h2>
   <table>
     <thead>
       <tr>
@@ -310,12 +330,12 @@ export function exportRunLedgerReport(data: RunLedgerData) {
           else if (ev.status === "PATCHED") badgeClass = "badge-patched";
 
           return `<tr>
-            <td>t=${ev.t}s</td>
-            <td><strong>${ev.node.toUpperCase()}</strong></td>
-            <td>${ev.sev}</td>
-            <td>${ev.title}</td>
-            <td><span class="badge ${badgeClass}">${ev.status}</span></td>
-            <td>${ev.statusDetail}</td>
+            <td>t=${escapeHtml(ev.t)}s</td>
+            <td><strong>${escapeHtml(ev.node.toUpperCase())}</strong></td>
+            <td>${escapeHtml(ev.sev)}</td>
+            <td>${escapeHtml(ev.title)}</td>
+            <td><span class="badge ${badgeClass}">${escapeHtml(ev.status)}</span></td>
+            <td>${escapeHtml(ev.statusDetail)}</td>
           </tr>`;
         })
         .join("")}
@@ -323,7 +343,7 @@ export function exportRunLedgerReport(data: RunLedgerData) {
   </table>
 
   <div class="footer">
-    <span>TWINSEC CYBER-PHYSICAL SIMULATION ENGINE v1.0</span>
+    <span>TWINSEC CYBER-PHYSICAL SIMULATION ENGINE v1.0.0</span>
     <span>AUTHENTICATED INCIDENT REPORT</span>
   </div>
 </body>

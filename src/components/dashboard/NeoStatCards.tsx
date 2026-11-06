@@ -14,7 +14,7 @@ export function NeoStatCards({
   totalMwShed = 1420,
   uptime = "99.99%",
 }: NeoStatCardsProps) {
-  const displayRuns = totalRuns > 0 ? totalRuns : 18;
+  const displayRuns = totalRuns ?? 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">

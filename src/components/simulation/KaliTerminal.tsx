@@ -9,6 +9,7 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { attackEventBus, type AttackEvent } from "@/lib/event-bus";
 import { CodeRainCanvas } from "./CodeRainCanvas";
+import type { SectorId } from "@/data/scenarios";
 
 interface KaliTerminalProps {
   terminalOpen: boolean;
@@ -21,12 +22,13 @@ interface KaliTerminalProps {
   terminalLogs: string[];
   terminalInput: string;
   setTerminalInput: (v: string) => void;
-  handleTerminalSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  handleTerminalSubmit: (e?: React.FormEvent<HTMLFormElement>, overrideCmd?: string) => void;
   t?: number;
   compromisedCount?: number;
   isolatedCount?: number;
   patchedCount?: number;
   nodes?: Array<{ id: string; label: string; kind: string }>;
+  sector?: SectorId;
 }
 
 export const KaliTerminal: React.FC<KaliTerminalProps> = ({
@@ -45,6 +47,7 @@ export const KaliTerminal: React.FC<KaliTerminalProps> = ({
   isolatedCount = 0,
   patchedCount = 0,
   nodes = [],
+  sector,
 }) => {
   const consoleEndRef = useRef<HTMLDivElement>(null);
   const [eventLogs, setEventLogs] = useState<string[]>([]);
@@ -429,6 +432,7 @@ export const KaliTerminal: React.FC<KaliTerminalProps> = ({
           <span className="text-[#bfff2e] font-bold uppercase mr-1 text-[9.5px]">COMMANDS:</span>
           {[
             { label: "SCAN", cmd: "scan" },
+            { label: `BLAST ${targetNode1.label}`, cmd: `blast ${targetNode1.id}` },
             {
               label: `ATTACK ${targetNode1.label}`,
               cmd: `attack ${targetNode1.id}`,
@@ -454,10 +458,7 @@ export const KaliTerminal: React.FC<KaliTerminalProps> = ({
               type="button"
               onClick={() => {
                 setTerminalInput(action.cmd);
-                const fakeForm = {
-                  preventDefault: () => {},
-                } as React.FormEvent<HTMLFormElement>;
-                setTimeout(() => handleTerminalSubmit(fakeForm), 40);
+                handleTerminalSubmit(undefined, action.cmd);
               }}
               className="bg-white/[0.04] hover:bg-[#bfff2e] hover:text-black text-[#bfff2e] border border-[#bfff2e]/30 px-2 py-0.5 font-mono font-bold transition-colors cursor-pointer text-[9.5px]"
             >
@@ -477,7 +478,7 @@ export const KaliTerminal: React.FC<KaliTerminalProps> = ({
           type="text"
           value={terminalInput}
           onChange={(e) => setTerminalInput(e.target.value)}
-          placeholder="attack <node> | isolate <node> | patch <node> | scan | drill | status | help"
+          placeholder="attack <node> | blast <node> | isolate <node> | patch <node> | scan | status | help"
           className="flex-1 bg-transparent border-none text-[#bfff2e] font-mono text-xs focus:outline-none placeholder-foreground/30"
           autoFocus
         />

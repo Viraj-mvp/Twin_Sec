@@ -9,85 +9,37 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WhitepapersRouteImport } from './routes/whitepapers'
-import { Route as TwinEngineRouteImport } from './routes/twin-engine'
-import { Route as TrainingLedgerRouteImport } from './routes/training-ledger'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as SimulationRouteImport } from './routes/simulation'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as S4TalkRouteImport } from './routes/s4-talk'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as FieldReportsRouteImport } from './routes/field-reports'
-import { Route as FaqRouteImport } from './routes/faq'
-import { Route as DefConBriefRouteImport } from './routes/def-con-brief'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ThreatProfilesIndexRouteImport } from './routes/threat-profiles.index'
+import { Route as BriefingsRouteImport } from './routes/briefings'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DefConBriefRouteImport } from './routes/def-con-brief'
+import { Route as FaqRouteImport } from './routes/faq'
+import { Route as FieldReportsRouteImport } from './routes/field-reports'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as S4TalkRouteImport } from './routes/s4-talk'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SimulationRouteImport } from './routes/simulation'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ThreatIntelRouteImport } from './routes/threat-intel'
+import { Route as TrainingLedgerRouteImport } from './routes/training-ledger'
+import { Route as TwinEngineRouteImport } from './routes/twin-engine'
+import { Route as WhitepapersRouteImport } from './routes/whitepapers'
 import { Route as CaseFilesIndexRouteImport } from './routes/case-files.index'
-import { Route as ThreatProfilesIdRouteImport } from './routes/threat-profiles.$id'
-import { Route as LeaderboardSubmitRouteImport } from './routes/leaderboard/submit'
-import { Route as FacilityIdRouteImport } from './routes/facility.$id'
 import { Route as CaseFilesIdRouteImport } from './routes/case-files.$id'
+import { Route as FacilityIdRouteImport } from './routes/facility.$id'
+import { Route as LeaderboardSubmitRouteImport } from './routes/leaderboard/submit'
+import { Route as ThreatProfilesIndexRouteImport } from './routes/threat-profiles.index'
+import { Route as ThreatProfilesIdRouteImport } from './routes/threat-profiles.$id'
 
-const WhitepapersRoute = WhitepapersRouteImport.update({
-  id: '/whitepapers',
-  path: '/whitepapers',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TwinEngineRoute = TwinEngineRouteImport.update({
-  id: '/twin-engine',
-  path: '/twin-engine',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TrainingLedgerRoute = TrainingLedgerRouteImport.update({
-  id: '/training-ledger',
-  path: '/training-ledger',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SimulationRoute = SimulationRouteImport.update({
-  id: '/simulation',
-  path: '/simulation',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const S4TalkRoute = S4TalkRouteImport.update({
-  id: '/s4-talk',
-  path: '/s4-talk',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FieldReportsRoute = FieldReportsRouteImport.update({
-  id: '/field-reports',
-  path: '/field-reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FaqRoute = FaqRouteImport.update({
-  id: '/faq',
-  path: '/faq',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DefConBriefRoute = DefConBriefRouteImport.update({
-  id: '/def-con-brief',
-  path: '/def-con-brief',
+const BriefingsRoute = BriefingsRouteImport.update({
+  id: '/briefings',
+  path: '/briefings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -95,14 +47,69 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DefConBriefRoute = DefConBriefRouteImport.update({
+  id: '/def-con-brief',
+  path: '/def-con-brief',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ThreatProfilesIndexRoute = ThreatProfilesIndexRouteImport.update({
-  id: '/threat-profiles/',
-  path: '/threat-profiles/',
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FieldReportsRoute = FieldReportsRouteImport.update({
+  id: '/field-reports',
+  path: '/field-reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const S4TalkRoute = S4TalkRouteImport.update({
+  id: '/s4-talk',
+  path: '/s4-talk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimulationRoute = SimulationRouteImport.update({
+  id: '/simulation',
+  path: '/simulation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ThreatIntelRoute = ThreatIntelRouteImport.update({
+  id: '/threat-intel',
+  path: '/threat-intel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrainingLedgerRoute = TrainingLedgerRouteImport.update({
+  id: '/training-ledger',
+  path: '/training-ledger',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TwinEngineRoute = TwinEngineRouteImport.update({
+  id: '/twin-engine',
+  path: '/twin-engine',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WhitepapersRoute = WhitepapersRouteImport.update({
+  id: '/whitepapers',
+  path: '/whitepapers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CaseFilesIndexRoute = CaseFilesIndexRouteImport.update({
@@ -110,14 +117,9 @@ const CaseFilesIndexRoute = CaseFilesIndexRouteImport.update({
   path: '/case-files/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ThreatProfilesIdRoute = ThreatProfilesIdRouteImport.update({
-  id: '/threat-profiles/$id',
-  path: '/threat-profiles/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeaderboardSubmitRoute = LeaderboardSubmitRouteImport.update({
-  id: '/leaderboard/submit',
-  path: '/leaderboard/submit',
+const CaseFilesIdRoute = CaseFilesIdRouteImport.update({
+  id: '/case-files/$id',
+  path: '/case-files/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FacilityIdRoute = FacilityIdRouteImport.update({
@@ -125,14 +127,25 @@ const FacilityIdRoute = FacilityIdRouteImport.update({
   path: '/facility/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CaseFilesIdRoute = CaseFilesIdRouteImport.update({
-  id: '/case-files/$id',
-  path: '/case-files/$id',
+const LeaderboardSubmitRoute = LeaderboardSubmitRouteImport.update({
+  id: '/leaderboard/submit',
+  path: '/leaderboard/submit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ThreatProfilesIndexRoute = ThreatProfilesIndexRouteImport.update({
+  id: '/threat-profiles/',
+  path: '/threat-profiles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ThreatProfilesIdRoute = ThreatProfilesIdRouteImport.update({
+  id: '/threat-profiles/$id',
+  path: '/threat-profiles/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/briefings': typeof BriefingsRoute
   '/dashboard': typeof DashboardRoute
   '/def-con-brief': typeof DefConBriefRoute
   '/faq': typeof FaqRoute
@@ -143,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/simulation': typeof SimulationRoute
   '/terms': typeof TermsRoute
+  '/threat-intel': typeof ThreatIntelRoute
   '/training-ledger': typeof TrainingLedgerRoute
   '/twin-engine': typeof TwinEngineRoute
   '/whitepapers': typeof WhitepapersRoute
@@ -155,6 +169,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/briefings': typeof BriefingsRoute
   '/dashboard': typeof DashboardRoute
   '/def-con-brief': typeof DefConBriefRoute
   '/faq': typeof FaqRoute
@@ -165,6 +180,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/simulation': typeof SimulationRoute
   '/terms': typeof TermsRoute
+  '/threat-intel': typeof ThreatIntelRoute
   '/training-ledger': typeof TrainingLedgerRoute
   '/twin-engine': typeof TwinEngineRoute
   '/whitepapers': typeof WhitepapersRoute
@@ -178,6 +194,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/briefings': typeof BriefingsRoute
   '/dashboard': typeof DashboardRoute
   '/def-con-brief': typeof DefConBriefRoute
   '/faq': typeof FaqRoute
@@ -188,6 +205,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/simulation': typeof SimulationRoute
   '/terms': typeof TermsRoute
+  '/threat-intel': typeof ThreatIntelRoute
   '/training-ledger': typeof TrainingLedgerRoute
   '/twin-engine': typeof TwinEngineRoute
   '/whitepapers': typeof WhitepapersRoute
@@ -202,6 +220,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/briefings'
     | '/dashboard'
     | '/def-con-brief'
     | '/faq'
@@ -212,6 +231,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/simulation'
     | '/terms'
+    | '/threat-intel'
     | '/training-ledger'
     | '/twin-engine'
     | '/whitepapers'
@@ -224,6 +244,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/briefings'
     | '/dashboard'
     | '/def-con-brief'
     | '/faq'
@@ -234,6 +255,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/simulation'
     | '/terms'
+    | '/threat-intel'
     | '/training-ledger'
     | '/twin-engine'
     | '/whitepapers'
@@ -246,6 +268,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/briefings'
     | '/dashboard'
     | '/def-con-brief'
     | '/faq'
@@ -256,6 +279,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/simulation'
     | '/terms'
+    | '/threat-intel'
     | '/training-ledger'
     | '/twin-engine'
     | '/whitepapers'
@@ -269,6 +293,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BriefingsRoute: typeof BriefingsRoute
   DashboardRoute: typeof DashboardRoute
   DefConBriefRoute: typeof DefConBriefRoute
   FaqRoute: typeof FaqRoute
@@ -279,6 +304,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SimulationRoute: typeof SimulationRoute
   TermsRoute: typeof TermsRoute
+  ThreatIntelRoute: typeof ThreatIntelRoute
   TrainingLedgerRoute: typeof TrainingLedgerRoute
   TwinEngineRoute: typeof TwinEngineRoute
   WhitepapersRoute: typeof WhitepapersRoute
@@ -292,88 +318,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/whitepapers': {
-      id: '/whitepapers'
-      path: '/whitepapers'
-      fullPath: '/whitepapers'
-      preLoaderRoute: typeof WhitepapersRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/twin-engine': {
-      id: '/twin-engine'
-      path: '/twin-engine'
-      fullPath: '/twin-engine'
-      preLoaderRoute: typeof TwinEngineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/training-ledger': {
-      id: '/training-ledger'
-      path: '/training-ledger'
-      fullPath: '/training-ledger'
-      preLoaderRoute: typeof TrainingLedgerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/simulation': {
-      id: '/simulation'
-      path: '/simulation'
-      fullPath: '/simulation'
-      preLoaderRoute: typeof SimulationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/s4-talk': {
-      id: '/s4-talk'
-      path: '/s4-talk'
-      fullPath: '/s4-talk'
-      preLoaderRoute: typeof S4TalkRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/field-reports': {
-      id: '/field-reports'
-      path: '/field-reports'
-      fullPath: '/field-reports'
-      preLoaderRoute: typeof FieldReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/faq': {
-      id: '/faq'
-      path: '/faq'
-      fullPath: '/faq'
-      preLoaderRoute: typeof FaqRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/def-con-brief': {
-      id: '/def-con-brief'
-      path: '/def-con-brief'
-      fullPath: '/def-con-brief'
-      preLoaderRoute: typeof DefConBriefRouteImport
+    '/briefings': {
+      id: '/briefings'
+      path: '/briefings'
+      fullPath: '/briefings'
+      preLoaderRoute: typeof BriefingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -383,18 +339,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/def-con-brief': {
+      id: '/def-con-brief'
+      path: '/def-con-brief'
+      fullPath: '/def-con-brief'
+      preLoaderRoute: typeof DefConBriefRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/threat-profiles/': {
-      id: '/threat-profiles/'
-      path: '/threat-profiles'
-      fullPath: '/threat-profiles/'
-      preLoaderRoute: typeof ThreatProfilesIndexRouteImport
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/field-reports': {
+      id: '/field-reports'
+      path: '/field-reports'
+      fullPath: '/field-reports'
+      preLoaderRoute: typeof FieldReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s4-talk': {
+      id: '/s4-talk'
+      path: '/s4-talk'
+      fullPath: '/s4-talk'
+      preLoaderRoute: typeof S4TalkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simulation': {
+      id: '/simulation'
+      path: '/simulation'
+      fullPath: '/simulation'
+      preLoaderRoute: typeof SimulationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/threat-intel': {
+      id: '/threat-intel'
+      path: '/threat-intel'
+      fullPath: '/threat-intel'
+      preLoaderRoute: typeof ThreatIntelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/training-ledger': {
+      id: '/training-ledger'
+      path: '/training-ledger'
+      fullPath: '/training-ledger'
+      preLoaderRoute: typeof TrainingLedgerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/twin-engine': {
+      id: '/twin-engine'
+      path: '/twin-engine'
+      fullPath: '/twin-engine'
+      preLoaderRoute: typeof TwinEngineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/whitepapers': {
+      id: '/whitepapers'
+      path: '/whitepapers'
+      fullPath: '/whitepapers'
+      preLoaderRoute: typeof WhitepapersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/case-files/': {
@@ -404,18 +437,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CaseFilesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/threat-profiles/$id': {
-      id: '/threat-profiles/$id'
-      path: '/threat-profiles/$id'
-      fullPath: '/threat-profiles/$id'
-      preLoaderRoute: typeof ThreatProfilesIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leaderboard/submit': {
-      id: '/leaderboard/submit'
-      path: '/leaderboard/submit'
-      fullPath: '/leaderboard/submit'
-      preLoaderRoute: typeof LeaderboardSubmitRouteImport
+    '/case-files/$id': {
+      id: '/case-files/$id'
+      path: '/case-files/$id'
+      fullPath: '/case-files/$id'
+      preLoaderRoute: typeof CaseFilesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facility/$id': {
@@ -425,11 +451,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FacilityIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/case-files/$id': {
-      id: '/case-files/$id'
-      path: '/case-files/$id'
-      fullPath: '/case-files/$id'
-      preLoaderRoute: typeof CaseFilesIdRouteImport
+    '/leaderboard/submit': {
+      id: '/leaderboard/submit'
+      path: '/leaderboard/submit'
+      fullPath: '/leaderboard/submit'
+      preLoaderRoute: typeof LeaderboardSubmitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/threat-profiles/': {
+      id: '/threat-profiles/'
+      path: '/threat-profiles'
+      fullPath: '/threat-profiles/'
+      preLoaderRoute: typeof ThreatProfilesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/threat-profiles/$id': {
+      id: '/threat-profiles/$id'
+      path: '/threat-profiles/$id'
+      fullPath: '/threat-profiles/$id'
+      preLoaderRoute: typeof ThreatProfilesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -437,6 +477,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BriefingsRoute: BriefingsRoute,
   DashboardRoute: DashboardRoute,
   DefConBriefRoute: DefConBriefRoute,
   FaqRoute: FaqRoute,
@@ -447,6 +488,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SimulationRoute: SimulationRoute,
   TermsRoute: TermsRoute,
+  ThreatIntelRoute: ThreatIntelRoute,
   TrainingLedgerRoute: TrainingLedgerRoute,
   TwinEngineRoute: TwinEngineRoute,
   WhitepapersRoute: WhitepapersRoute,

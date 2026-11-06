@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import type { Node, Edge } from "@/data/scenarios";
+import type { BlastRadiusResult } from "@/lib/simulation/blast-radius";
 
 interface Topology2DProps {
   nodes: readonly Node[] | Node[];
@@ -13,6 +14,9 @@ interface Topology2DProps {
   isolatedNodes?: Set<string>;
   commandActiveNode?: string | null;
   commandActiveAction?: string | null;
+  previewAirGapNode?: string | null;
+  onHoverNode?: (id: string | null) => void;
+  blastRadiusResult?: BlastRadiusResult | null;
 }
 
 export const Topology2D: React.FC<Topology2DProps> = React.memo(
@@ -20,12 +24,16 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
     nodes,
     edges,
     compromised,
+    blockedNodes = new Set<string>(),
     selected,
     onSelect,
     t,
     activeNode,
     isolatedNodes = new Set<string>(),
     commandActiveNode,
+    previewAirGapNode,
+    onHoverNode,
+    blastRadiusResult,
   }) => {
     const byId = (id: string) => nodes.find((n) => n.id === id);
     const [pressed, setPressed] = useState<string | null>(null);
@@ -65,7 +73,59 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
         viewBox="0 0 1000 500"
         preserveAspectRatio="xMidYMid meet"
         className="w-full h-full touch-manipulation select-none"
+        onPointerLeave={() => {
+          onPointerCancel();
+          onHoverNode?.(null);
+        }}
       >
+        <defs>
+          <pattern
+            id="blast-amber-hatch"
+            width="12"
+            height="12"
+            patternTransform="rotate(45 0 0)"
+            patternUnits="userSpaceOnUse"
+          >
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="12"
+              stroke="oklch(0.82 0.2 85)"
+              strokeWidth="2.5"
+              strokeOpacity="0.45"
+            />
+          </pattern>
+        </defs>
+
+        {/* BLAST RADIUS PREVIEW: TELEMETRY BLINDNESS CONVEX HULL */}
+        {blastRadiusResult?.blindedHullPath && (
+          <g className="animate-in fade-in duration-200 pointer-events-none">
+            <path
+              d={blastRadiusResult.blindedHullPath}
+              fill="url(#blast-amber-hatch)"
+              stroke="oklch(0.82 0.2 85)"
+              strokeWidth={2.5}
+              strokeDasharray="6 4"
+              opacity={0.9}
+            />
+          </g>
+        )}
+
+        {/* BLAST RADIUS PREVIEW: CONTAINMENT SHIELD CONVEX HULL */}
+        {blastRadiusResult?.protectedHullPath && (
+          <g className="animate-in fade-in duration-200 pointer-events-none">
+            <path
+              d={blastRadiusResult.protectedHullPath}
+              fill="rgba(191, 255, 46, 0.08)"
+              stroke="oklch(0.86 0.24 125)"
+              strokeWidth={2.5}
+              strokeDasharray="8 4"
+              opacity={0.9}
+            />
+          </g>
+        )}
+
         {/* EDGES / LINKS */}
         {edges.map((e, i) => {
           const a = byId(e.from);
@@ -177,6 +237,38 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                   </text>
                 </g>
               )}
+
+              {/* Pre-flight Air-Gap preview severed link indicator */}
+              {!isIso &&
+                blastRadiusResult?.severedEdgeKeys &&
+                (blastRadiusResult.severedEdgeKeys.includes(`${e.from}->${e.to}`) ||
+                  blastRadiusResult.severedEdgeKeys.includes(`${e.to}->${e.from}`)) && (
+                  <g
+                    transform={`translate(${mx}, ${my})`}
+                    className="pointer-events-none animate-in zoom-in-50 duration-150"
+                  >
+                    <rect
+                      x={-10}
+                      y={-8}
+                      width={20}
+                      height={16}
+                      fill="#000000"
+                      stroke="oklch(0.65 0.25 28)"
+                      strokeWidth={2}
+                    />
+                    <text
+                      x={0}
+                      y={4}
+                      textAnchor="middle"
+                      fill="oklch(0.65 0.25 28)"
+                      fontSize={11}
+                      fontWeight="900"
+                      fontFamily="monospace"
+                    >
+                      ✕
+                    </text>
+                  </g>
+                )}
             </g>
           );
         })}
@@ -188,9 +280,13 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
 
           const isC = compromised.has(n.id);
           const isIso = isolatedNodes.has(n.id);
+          const isProtectedByBlast = blastRadiusResult?.protectedNodeIds.includes(n.id) ?? false;
+          const isBlindedByBlast = blastRadiusResult?.blindedNodeIds.includes(n.id) ?? false;
+          const isBlocked = blockedNodes.has(n.id) || isProtectedByBlast;
           const isS = selected === n.id;
           const isA = activeNode === n.id || commandActiveNode === n.id;
           const isP = pressed === n.id;
+          const isPreview = previewAirGapNode === n.id;
 
           return (
             <g
@@ -199,15 +295,24 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
               style={{ touchAction: "manipulation" }}
               role="button"
               tabIndex={0}
-              aria-label={`${n.label} — ${n.kind}. ${isIso ? "Air-gapped" : isC ? "Compromised" : "Nominal"}. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
+              aria-label={`${n.label} — ${n.kind}. ${isIso ? "Air-gapped" : isC ? "Compromised" : isBlocked ? "Shielded" : "Nominal"}. Ring ${n.ring}. Press Enter or Space to open asset dossier.`}
               aria-pressed={isS}
+              onPointerEnter={() => onHoverNode?.(n.id)}
+              onPointerLeave={() => {
+                onPointerCancel();
+                onHoverNode?.(null);
+              }}
+              onFocus={() => onHoverNode?.(n.id)}
+              onBlur={() => onHoverNode?.(null)}
               onPointerDown={(e) => {
                 e.preventDefault();
                 onPointerDown(n.id);
               }}
               onPointerUp={() => onPointerUp(n.id)}
-              onPointerLeave={onPointerCancel}
-              onPointerCancel={onPointerCancel}
+              onPointerCancel={() => {
+                onPointerCancel();
+                onHoverNode?.(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -215,6 +320,20 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                 }
               }}
             >
+              {/* Target Preview Reticle for Blast Radius Hover */}
+              {isPreview && (
+                <rect
+                  x={nx - 14}
+                  y={ny - 14}
+                  width={28}
+                  height={28}
+                  fill="none"
+                  stroke="oklch(0.82 0.2 85)"
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
               {/* Safe-area 44px enlarged hit target */}
               <rect x={nx - 24} y={ny - 24} width={48} height={48} fill="transparent" />
 
@@ -292,8 +411,22 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                 </circle>
               )}
 
-              {/* Compromised halo circle */}
+              {/* Compromised halo circle (Danger Red alert) */}
               {isC && !isIso && (
+                <circle
+                  cx={nx}
+                  cy={ny}
+                  r={18}
+                  fill="none"
+                  stroke="oklch(0.65 0.25 28)"
+                  strokeWidth={1.5}
+                  opacity={0.65}
+                  vectorEffect="non-scaling-stroke"
+                />
+              )}
+
+              {/* Shielded / Protected halo circle (Acid Lime dash) */}
+              {isBlocked && !isIso && !isC && (
                 <circle
                   cx={nx}
                   cy={ny}
@@ -301,7 +434,8 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                   fill="none"
                   stroke="oklch(0.86 0.24 125)"
                   strokeWidth={1.5}
-                  opacity={0.45}
+                  strokeDasharray="4 2"
+                  opacity={0.65}
                   vectorEffect="non-scaling-stroke"
                 />
               )}
@@ -316,8 +450,12 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                   isIso
                     ? "oklch(0.82 0.2 85)"
                     : isC
-                      ? "oklch(0.86 0.24 125)"
-                      : "oklch(0.14 0.005 240)"
+                      ? "oklch(0.65 0.25 28)"
+                      : isBlocked
+                        ? "oklch(0.86 0.24 125)"
+                        : isBlindedByBlast
+                          ? "oklch(0.82 0.2 85 / 0.25)"
+                          : "oklch(0.20 0.025 140)"
                 }
                 stroke={
                   isS
@@ -325,10 +463,14 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                     : isIso
                       ? "oklch(0.82 0.2 85)"
                       : isC
-                        ? "oklch(0.97 0.005 90)"
-                        : "oklch(0.55 0.02 240)"
+                        ? "oklch(0.65 0.25 28)"
+                        : isBlocked
+                          ? "oklch(0.86 0.24 125)"
+                          : isBlindedByBlast
+                            ? "oklch(0.82 0.2 85)"
+                            : "oklch(0.86 0.24 125 / 0.75)"
                 }
-                strokeWidth={isS ? 2.5 : 1.5}
+                strokeWidth={isS || isBlocked || isC || isIso || isBlindedByBlast ? 2.5 : 2}
                 vectorEffect="non-scaling-stroke"
                 style={{
                   transition: "transform 120ms",
@@ -336,6 +478,69 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
                   transform: isP ? "scale(1.25)" : undefined,
                 }}
               />
+
+              {/* Center Icons for Tactile Status Identification */}
+              {isIso && (
+                <text
+                  x={nx}
+                  y={ny + 4}
+                  fill="#000000"
+                  fontSize="12"
+                  fontWeight="900"
+                  textAnchor="middle"
+                  className="pointer-events-none select-none font-mono"
+                >
+                  ✕
+                </text>
+              )}
+              {isC && !isIso && (
+                <text
+                  x={nx}
+                  y={ny + 4}
+                  fill="#ffffff"
+                  fontSize="12"
+                  fontWeight="900"
+                  textAnchor="middle"
+                  className="pointer-events-none select-none font-mono"
+                >
+                  !
+                </text>
+              )}
+              {isBlocked && !isIso && !isC && (
+                <text
+                  x={nx}
+                  y={ny + 4}
+                  fill="#000000"
+                  fontSize="11"
+                  fontWeight="900"
+                  textAnchor="middle"
+                  className="pointer-events-none select-none font-mono"
+                >
+                  ✓
+                </text>
+              )}
+              {isBlindedByBlast && !isIso && !isC && !isBlocked && (
+                <text
+                  x={nx}
+                  y={ny + 4}
+                  fill="oklch(0.82 0.2 85)"
+                  fontSize="11"
+                  fontWeight="900"
+                  textAnchor="middle"
+                  className="pointer-events-none select-none font-mono"
+                >
+                  ⚡
+                </text>
+              )}
+              {!isIso && !isC && !isBlocked && !isBlindedByBlast && (
+                <circle
+                  cx={nx + 6}
+                  cy={ny - 6}
+                  r={2.5}
+                  fill="oklch(0.86 0.24 125)"
+                  className="animate-pulse"
+                />
+              )}
             </g>
           );
         })}
@@ -346,6 +551,7 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
           const ny = mapY(n.y);
           const isC = compromised.has(n.id);
           const isIso = isolatedNodes.has(n.id);
+          const isBlocked = blockedNodes.has(n.id);
           const isS = selected === n.id;
 
           // For the rightmost nodes (e.g. ring 5, x >= 90), render label with clean positioning
@@ -365,17 +571,31 @@ export const Topology2D: React.FC<Topology2DProps> = React.memo(
               >
                 {n.label}
               </text>
-              {/* Subtitle / Kind */}
+              {/* Subtitle / Status */}
               <text
                 x={isRightEdge ? nx + 14 : nx + 15}
                 y={ny + 12}
-                fill="oklch(0.65 0.02 240)"
+                fill={
+                  isIso
+                    ? "oklch(0.82 0.2 85)"
+                    : isC
+                      ? "oklch(0.65 0.25 28)"
+                      : isBlocked
+                        ? "oklch(0.86 0.24 125)"
+                        : "oklch(0.65 0.02 240)"
+                }
                 fontSize="9"
-                fontWeight="600"
+                fontWeight="700"
                 fontFamily="JetBrains Mono, monospace"
                 letterSpacing="0.05em"
               >
-                {n.kind.toUpperCase()}
+                {isIso
+                  ? "AIR-GAPPED"
+                  : isC
+                    ? "BREACHED"
+                    : isBlocked
+                      ? "SHIELDED"
+                      : n.kind.toUpperCase()}
               </text>
             </g>
           );

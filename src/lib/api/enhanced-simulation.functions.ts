@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/db";
 import { trainingRuns, auditLogs } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
-import { getSessionCookie } from "../auth.server";
+import { getAuthOperatorId, logAuditEvent } from "../server-helpers.server";
 
 // Enums
 const SECTORS = [
@@ -31,126 +31,16 @@ const SIMULATION_PHASES = ["RECON", "EXPLOIT", "DEFEND", "REVIEW"] as const;
 
 const DECISION_OPTIONS = ["ACT", "DEFER", "DO_NOTHING"] as const;
 
-// Prompt injection detection patterns
-const PROMPT_INJECTION_PATTERNS: Array<{ label: string; re: RegExp }> = [
-  {
-    label: "ignore previous instructions",
-    re: /ignore.*previous.*instructions|disregard.*prior|forget.*previous/i,
-  },
-  { label: "system prompt access", re: /system.*prompt|your.*prompt|show.*prompt|return.*prompt/i },
-  {
-    label: "roleplay as developer",
-    re: /you.*are.*a.*developer|act.*as.*a.*developer|pretend.*to.*be.*developer/i,
-  },
-  {
-    label: "code execution request",
-    re: /execute.*code|run.*command|shell.*exec|eval\(|system\(|exec\(/i,
-  },
-  {
-    label: "exfiltration request",
-    re: /send.*to.*url|post.*to.*|exfiltrate.*data|leak.*information/i,
-  },
-  // eslint-disable-next-line no-control-regex
-  { label: "control character", re: /[\x00-\x1F\x7F]/g },
-];
+import {
+  detectPromptInjection,
+  scrubOutput,
+  scrubContent,
+  sanitizePromptInput,
+} from "../safety-scrub";
 
-export function detectPromptInjection(text: string): { detected: boolean; patterns: string[] } {
-  const detectedPatterns: string[] = [];
-  PROMPT_INJECTION_PATTERNS.forEach((pattern) => {
-    if (pattern.re.test(text)) {
-      detectedPatterns.push(pattern.label);
-    }
-  });
-  return { detected: detectedPatterns.length > 0, patterns: detectedPatterns };
-}
-
-// Safety scrubbing logic
-const FORBIDDEN_PATTERNS: Array<{ label: string; re: RegExp; replacement: string }> = [
-  {
-    label: "shellcode block",
-    re: /\\x[0-9a-f]{2}(?:\\x[0-9a-f]{2}){6,}/gi,
-    replacement: "[SHELLCODE REDACTED]",
-  },
-  {
-    label: "private key",
-    re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END[^-]+-----/g,
-    replacement: "[PRIVATE KEY REDACTED]",
-  },
-  {
-    label: "AWS access key id",
-    re: /\bAKIA[0-9A-Z]{16}\b/g,
-    replacement: "[AWS KEY REDACTED]",
-  },
-  {
-    label: "bearer token",
-    re: /\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b/g,
-    replacement: "Bearer [TOKEN REDACTED]",
-  },
-  {
-    label: "runnable curl pipe",
-    re: /curl\s+[^\n|]*\|\s*(?:sh|bash|zsh)\b/gi,
-    replacement: "curl [URL] | [SHELL REDACTED]",
-  },
-  {
-    label: "real email",
-    re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-    replacement: "[EMAIL REDACTED]",
-  },
-  {
-    label: "real phone number",
-    re: /\b(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[-.]?\d{3}[-.]?\d{4}\b/g,
-    replacement: "[PHONE REDACTED]",
-  },
-];
-
-export function scrubOutput(text: string): string {
-  let scrubbed = text;
-  const appliedScrubbing: string[] = [];
-
-  // Add DEFANGED prefix to all commands
-  scrubbed = scrubbed.replace(
-    /^([A-Z-]+ > )/gm,
-    "[DEFANGED] - For Training Only - Not Runnable in Real Environments\n$1",
-  );
-  appliedScrubbing.push("added DEFANGED prefix");
-
-  // Replace public IPs with RFC 5737 ranges
-  const ipMatches = (
-    scrubbed.match(
-      /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
-    ) || []
-  ).length;
-  if (ipMatches > 0) appliedScrubbing.push("replaced public IPs");
-  scrubbed = scrubbed.replace(
-    /\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b/g,
-    (match) => {
-      if (/^(192\.0\.2\.|198\.51\.100\.|203\.0\.113\.|10\.|127\.|0\.)/.test(match)) return match;
-      return "203.0.113.X";
-    },
-  );
-
-  // Apply forbidden pattern replacements
-  FORBIDDEN_PATTERNS.forEach((pattern) => {
-    const matches = (scrubbed.match(pattern.re) || []).length;
-    if (matches > 0) {
-      appliedScrubbing.push(pattern.label);
-      scrubbed = scrubbed.replace(pattern.re, pattern.replacement);
-    }
-  });
-
-  // Ensure code blocks have defang prefix
-  const codeBlockMatches = (scrubbed.match(/```(\w*)\n/g) || []).length;
-  if (codeBlockMatches > 0) appliedScrubbing.push("defanged code blocks");
-  scrubbed = scrubbed.replace(/```(\w*)\n/g, (match, lang) => {
-    return `\`\`\`${lang}\n// illustrative — NOT runnable — defanged for training\n`;
-  });
-
-  return scrubbed;
-}
-
-export const scrubContent = scrubOutput;
-
-// Zod validation schemas
+// SECURITY: Defense-in-depth prompt injection protection via Zod schema validation.
+// All user-controlled string inputs pass through detectPromptInjection() before reaching AI prompts.
+// Simulation state is validated via safeString to prevent injection via stored parameters.
 const safeString = z
   .string()
   .min(0)
@@ -1080,33 +970,6 @@ Step 2: Respond
     },
   },
 };
-
-// Helper to get auth operator ID
-async function getAuthOperatorId() {
-  const token = getSessionCookie();
-  if (!token) return null;
-
-  const session = await db.query.sessions.findFirst({
-    where: (fields) => eq(fields.token, token),
-  });
-
-  if (!session || new Date(session.expiresAt) < new Date()) {
-    return null;
-  }
-
-  return session.operatorId;
-}
-
-// Audit log helper
-async function logAuditEvent(trainingRunId: string, eventType: string, details: unknown) {
-  await db.insert(auditLogs).values({
-    id: crypto.randomUUID(),
-    trainingRunId,
-    timestamp: new Date().toISOString(),
-    eventType,
-    details: JSON.stringify(details),
-  });
-}
 
 // Server Functions
 

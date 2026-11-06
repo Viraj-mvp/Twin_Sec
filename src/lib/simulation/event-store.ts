@@ -13,7 +13,19 @@ export type SimEventType =
   | "TELEMETRY_ANOMALY"
   | "DEFENSE_INTERVENTION"
   | "PHYSICAL_CASCADE"
-  | "SIS_TRIP";
+  | "SIS_TRIP"
+  | "PLC_COMMAND"
+  | "PLC_REGISTER_WRITE"
+  | "SENSOR_UPDATE"
+  | "ACTUATOR_CHANGE"
+  | "PROCESS_DEVIATION"
+  | "ATTACK_STARTED"
+  | "ATTACK_ACTION"
+  | "DETECTION_TRIGGERED"
+  | "INCIDENT_CREATED"
+  | "ASSET_ISOLATED"
+  | "RECOVERY_STARTED"
+  | "RECOVERY_COMPLETED";
 
 export interface SimEventRecord {
   eventId: string;
@@ -26,6 +38,8 @@ export interface SimEventRecord {
   title: string;
   description: string;
   data: Record<string, unknown>;
+  beforeState?: Record<string, unknown>;
+  afterState?: Record<string, unknown>;
   branchId?: string; // Timeline branch identifier (default: "main")
 }
 
@@ -51,13 +65,16 @@ export class EventStore {
   /**
    * Append an immutable event record to the log
    */
-  public append(event: Omit<SimEventRecord, "eventId">): SimEventRecord {
+  public append(event: Omit<SimEventRecord, "eventId"> & { eventId?: string }): SimEventRecord {
     const newEvent: SimEventRecord = {
       ...event,
-      eventId: `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      eventId: event.eventId ?? `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       branchId: event.branchId ?? "main",
     };
     this.events.push(newEvent);
+    if (this.events.length > 1000) {
+      this.events.splice(0, this.events.length - 1000);
+    }
     return newEvent;
   }
 

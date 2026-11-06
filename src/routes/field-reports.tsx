@@ -108,7 +108,7 @@ function FieldReports() {
         <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-6 flex flex-wrap justify-between items-baseline gap-4 mono-label !text-ink">
           <button
             type="button"
-            onClick={(e) => handleSmartBack(e)}
+            onClick={(e) => handleSmartBack(e, "/briefings")}
             className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
           >
             ← RETURN
@@ -251,7 +251,7 @@ function FieldReports() {
           <span>TWINSEC FIELD REPORTS · 2026</span>
           <button
             type="button"
-            onClick={(e) => handleSmartBack(e)}
+            onClick={(e) => handleSmartBack(e, "/briefings")}
             className="hover:text-accent cursor-pointer bg-transparent border-0 p-0 text-left"
           >
             ← RETURN

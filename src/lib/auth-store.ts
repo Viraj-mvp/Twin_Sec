@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { getOperatorSession, logoutOperator } from "./api/auth.functions";
+import {
+  getOperatorSession,
+  logoutOperator,
+  updateOperatorPreferences,
+} from "./api/auth.functions";
 import { log } from "@/lib/logger";
 
 export type SectorId =
@@ -92,6 +96,10 @@ export function usePreferences() {
   const updatePrefs = (newPrefs: Partial<UserPreferences>) => {
     const next = { ...prefs, ...newPrefs };
     savePreferences(next);
+    // Asynchronously synchronize with SQLite database
+    updateOperatorPreferences({ data: next }).catch((err) => {
+      log.error("Failed to sync preferences to database:", err);
+    });
   };
 
   return [prefs, updatePrefs] as const;

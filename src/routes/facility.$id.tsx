@@ -1,11 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import facility from "@/assets/facility.jpg";
-import schematic from "@/assets/schematic.jpg";
+import { getSectorSchematic } from "@/data/schematics";
 import breaker from "@/assets/breaker.jpg";
 import { FACILITIES, FACILITY_IMAGES, type FacilityId } from "./twin-engine";
-import { EXERCISES } from "@/data/scenarios";
+import { EXERCISES, type SectorId } from "@/data/scenarios";
 import { useGsapReveal } from "@/hooks/use-gsap-reveal";
+import { getHistoricalAttacks } from "@/data/historical-attacks";
 
 const EXERCISES_LABEL: Partial<Record<FacilityId, string>> = Object.fromEntries(
   Object.entries(EXERCISES).map(([k, v]: [string, { code: string }]) => [k, v.code]),
@@ -1010,6 +1011,8 @@ function FacilityPage() {
   const rootRef = useGsapReveal<HTMLElement>();
   const heroImage = FACILITY_IMAGES[id] ?? facility;
 
+  const historicalAttacks = getHistoricalAttacks(id as SectorId);
+
   return (
     <main ref={rootRef} className="min-h-screen bg-background text-foreground">
       {/* HEADER */}
@@ -1129,7 +1132,7 @@ function FacilityPage() {
           <div className="col-span-12 lg:col-span-9 relative min-h-[520px] lg:min-h-[680px] bg-background">
             <div className="absolute inset-0 grid-bg opacity-30" />
             <img
-              src={schematic}
+              src={getSectorSchematic(id)}
               alt=""
               aria-hidden
               className="absolute inset-0 h-full w-full object-cover opacity-10"
@@ -1194,7 +1197,149 @@ function FacilityPage() {
         </div>
       </section>
 
-      {/* CLOSING */}
+      {/* SECTION 04 — DECLASSIFIED INCIDENTS */}
+      {historicalAttacks.length > 0 && (
+        <section className="border-b border-rule bg-background text-foreground">
+          <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-20 lg:py-28">
+            {/* SECTION HEADER — MATCHING SECTION 1 & 3 GRID */}
+            <div className="grid grid-cols-12 gap-8 border-b-2 border-rule pb-10">
+              <div className="col-span-12 md:col-span-3 space-y-2">
+                <p className="mono-label text-accent">SECTION 04 — DECLASSIFIED INCIDENTS</p>
+                <p className="font-mono text-xs text-foreground/50 tracking-wider uppercase">
+                  EMPIRICAL ICS CASE DOSSIERS · {meta.sector}
+                </p>
+              </div>
+              <div className="col-span-12 md:col-span-9">
+                <h2 className="display text-5xl md:text-7xl lg:text-[100px] leading-[0.85]">
+                  Ground truth from
+                  <br />
+                  <span className="italic font-serif normal-case tracking-tight text-accent">
+                    the industrial record.
+                  </span>
+                </h2>
+                <p className="font-serif italic text-xl md:text-2xl mt-4 text-foreground/75 max-w-3xl leading-snug">
+                  These historical incidents attacked real physical equipment in the field. Examine
+                  the hardware attack chain and rehearse each incident inside the twin.
+                </p>
+              </div>
+            </div>
+
+            {/* DECLASSIFIED INCIDENT DOSSIERS — MATCHING SECTION 3 TWO-COLUMN COMPARATIVE LEDGER */}
+            <ol className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-x-12 lg:gap-x-16 gap-y-12">
+              {historicalAttacks.map((atk) => (
+                <li
+                  key={atk.id}
+                  className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-4 py-8 border-b border-rule/60"
+                >
+                  {/* LEFT: INCIDENT CODE */}
+                  <span className="mono-label text-accent text-sm font-bold">{atk.code}</span>
+
+                  {/* RIGHT: INCIDENT DOSSIER CONTENT */}
+                  <div className="space-y-5">
+                    {/* TITLE & CLASSIFICATION */}
+                    <div>
+                      <div className="flex flex-wrap items-baseline justify-between gap-3">
+                        <p className="display text-3xl lg:text-4xl leading-tight text-foreground">
+                          {atk.name}
+                        </p>
+                        <span className="mono-label text-xs uppercase px-2 py-0.5 border border-rule text-foreground/60">
+                          {atk.classification.split("·")[0]?.trim()} · {atk.year}
+                        </span>
+                      </div>
+                      <p className="font-mono text-xs text-foreground/50 uppercase tracking-wider mt-2">
+                        TARGET: {atk.targetFacility} · ACTOR:{" "}
+                        <span className="text-warn font-semibold">{atk.threatActor}</span>
+                      </p>
+                    </div>
+
+                    {/* ATTACK VECTOR NARRATIVE */}
+                    <p className="font-serif text-lg italic text-foreground/85 leading-snug">
+                      {atk.attackVector}
+                    </p>
+
+                    {/* PHYSICAL TELEMETRY DRIFT & CONSEQUENCE */}
+                    <div className="space-y-1.5 font-mono text-xs border-l-2 border-danger pl-3 py-1">
+                      <p className="text-danger leading-relaxed">
+                        → CONSEQUENCE: {atk.physicsImpact.consequence}
+                      </p>
+                      <p className="text-foreground/50">→ BASELINE: {atk.physicsImpact.baseline}</p>
+                    </div>
+
+                    {/* TARGETED ICS HARDWARE */}
+                    <div className="pt-3 border-t border-rule/30">
+                      <p className="mono-label text-xs text-foreground/50 mb-2">
+                        TARGETED ICS HARDWARE
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-xs">
+                        {atk.targetedHardware.map((hw, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-baseline justify-between gap-2 border-b border-rule/20 pb-1"
+                          >
+                            <span className="font-semibold text-foreground truncate">
+                              {hw.model}
+                            </span>
+                            <span className="text-[10px] text-foreground/40 uppercase shrink-0">
+                              {hw.category}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* MITRE ATT&CK & PROTOCOLS */}
+                    <div className="pt-3 border-t border-rule/30 space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+                        <span className="mono-label text-xs text-foreground/40 mr-1">
+                          PROTOCOLS:
+                        </span>
+                        {atk.exploitedProtocols.map((proto) => (
+                          <span
+                            key={proto}
+                            className="px-2 py-0.5 border border-rule/60 text-foreground/80 text-[11px]"
+                          >
+                            {proto}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
+                        <span className="mono-label text-xs text-foreground/40 mr-1">MITRE:</span>
+                        {atk.mitreTtpList.map((ttp) => (
+                          <span
+                            key={ttp.id}
+                            className="px-2 py-0.5 border border-rule/60 text-foreground/80 text-[11px]"
+                            title={ttp.desc}
+                          >
+                            <strong className="text-accent">{ttp.id}</strong> {ttp.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ACTION REHEARSAL LINK */}
+                    <div className="pt-4 border-t border-rule flex items-center justify-between">
+                      <Link
+                        to="/simulation"
+                        search={{ sector: id as FacilityId, attack: atk.id }}
+                        className="mono-label text-accent font-bold hover:text-foreground inline-flex items-center gap-2 group transition-colors"
+                      >
+                        <span>REHEARSE THIS INCIDENT [{atk.code}]</span>
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
+                      </Link>
+                      <span className="font-mono text-[10px] text-foreground/40 uppercase">
+                        DIGITAL TWIN READY
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      )}
+
+      {/* CLOSING / REHEARSAL */}
       <section className="relative border-b border-rule overflow-hidden">
         <img
           src={heroImage}
@@ -1206,7 +1351,7 @@ function FacilityPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
         <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-36">
-          <p className="mono-label">SECTION 04 — REHEARSAL</p>
+          <p className="mono-label">SECTION 05 — REHEARSAL</p>
           <h2 className="display text-[14vw] md:text-[10vw] lg:text-[140px] leading-[0.84] mt-4">
             REHEARSE
             <br />

@@ -13,12 +13,14 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { registerOperator } from "@/lib/api/auth.functions";
+import { syncGuestTrainingRuns } from "@/lib/api/training.functions";
+import { getGuestRuns, clearGuestRuns } from "@/lib/guest-store";
 import { saveLocalSession } from "@/lib/auth-store";
 import { useOperator } from "@/contexts/OperatorContext";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
-import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
+import { CyberNetworkCanvas } from "@/components/canvas/CyberNetworkCanvas";
 import { log } from "@/lib/logger";
-import { CyberRadarCanvas } from "@/components/CyberRadarCanvas";
+import { CyberRadarCanvas } from "@/components/canvas/CyberRadarCanvas";
 
 export const Route = createFileRoute("/signup")({
   validateSearch: (search: Record<string, unknown>): { from?: string } => ({
@@ -46,7 +48,7 @@ function SignupPage() {
   // Dossier Registration Form State
   const [callsign, setCallsign] = useState("");
   const [email, setEmail] = useState("");
-  const [clearance, setClearance] = useState("TS/SCI · RED LEVEL");
+  const [clearance] = useState("RESTRICTED · OPERATOR LEVEL");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -88,8 +90,17 @@ function SignupPage() {
       setErrorMsg("A valid operator email address is required.");
       return;
     }
-    if (cleanPassword.length < 6) {
-      setErrorMsg("Password sequence key must be at least 6 characters.");
+    if (cleanPassword.length < 12) {
+      setErrorMsg("Password sequence key must be at least 12 characters.");
+      return;
+    }
+    if (
+      !/[A-Z]/.test(cleanPassword) ||
+      !/[a-z]/.test(cleanPassword) ||
+      !/[0-9]/.test(cleanPassword) ||
+      !/[^A-Za-z0-9]/.test(cleanPassword)
+    ) {
+      setErrorMsg("Password must include uppercase, lowercase, digit, and special character.");
       return;
     }
     if (confirmPassword.trim() !== cleanPassword) {
@@ -99,7 +110,7 @@ function SignupPage() {
 
     setIsSubmitting(true);
     try {
-      const assignedBadge = `OP-${Math.floor(1000 + Math.random() * 9000)}`;
+      const assignedBadge = `OP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const regRes = await registerOperator({
         data: {
           callsign: cleanCallsign,
@@ -113,9 +124,20 @@ function SignupPage() {
       saveLocalSession({
         callsign: regRes.operator.callsign,
         badgeId: regRes.operator.badgeId || "OP-0000",
-        clearance: regRes.operator.clearance || "TS/SCI · RED LEVEL",
+        clearance: regRes.operator.clearance || "RESTRICTED · OPERATOR LEVEL",
         loggedIn: true,
       });
+
+      // Claim & sync any existing local guest runs to the newly registered operator
+      try {
+        const localRuns = getGuestRuns();
+        if (localRuns.length > 0) {
+          await syncGuestTrainingRuns({ data: { runs: localRuns } });
+          clearGuestRuns();
+        }
+      } catch (e) {
+        log.error("Failed to sync guest runs on operator registration:", e);
+      }
 
       await refresh();
       const dest =
@@ -253,24 +275,27 @@ function SignupPage() {
                 />
               </div>
 
-              {/* Security Clearance Selection */}
+              {/* Security Clearance Provisioning */}
               <div className="space-y-1">
                 <label
                   htmlFor="signup-clearance"
                   className="mono-label block text-[9px] font-black text-black uppercase"
                 >
-                  SECURITY CLEARANCE LEVEL
+                  SECURITY CLEARANCE TIER
                 </label>
-                <select
+                <div
                   id="signup-clearance"
-                  value={clearance}
-                  onChange={(e) => setClearance(e.target.value)}
-                  className="w-full border-3 border-black bg-[#F5F3E7] px-3 py-2.5 font-mono text-xs text-black font-extrabold outline-none focus:border-black cursor-pointer transition-colors shadow-[2px_2px_0px_0px_#000000]"
+                  className="w-full border-3 border-black bg-stone-100 px-3 py-2 font-mono text-xs text-black font-extrabold flex items-center justify-between shadow-[2px_2px_0px_0px_#000000]"
                 >
-                  <option value="TS/SCI · RED LEVEL">TS/SCI · RED LEVEL (FULL OT RANGE)</option>
-                  <option value="SECRET · BLUE LEVEL">SECRET · BLUE LEVEL (SIMULATOR ONLY)</option>
-                  <option value="UNRESTRICTED">UNRESTRICTED (OBSERVER MODE)</option>
-                </select>
+                  <span className="tracking-wider">RESTRICTED · OPERATOR LEVEL</span>
+                  <span className="bg-[#BFFF2E] text-black text-[9px] px-1.5 py-0.5 border border-black font-black uppercase shadow-[1px_1px_0px_0px_#000000]">
+                    INITIAL TIER
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-600 font-mono mt-1 font-semibold">
+                  * Higher OT SCADA clearance is server-authoritative and assigned
+                  post-verification.
+                </p>
               </div>
             </div>
 
@@ -385,7 +410,7 @@ function SignupPage() {
             ← RETURN TO LANDING
           </button>
           <span className="bg-black text-[#F5F3E7] px-2 py-0.5 border border-black font-black">
-            CLASSIFIED // TWINSEC v1
+            CLASSIFIED // TWINSEC v1.0.0
           </span>
         </footer>
       </main>

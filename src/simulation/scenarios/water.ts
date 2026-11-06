@@ -295,3 +295,38 @@ export const WATER_SCENARIO: AttackScenario = {
     ],
   },
 };
+
+export const WATER_TWIN_ATTACK_SEQUENCE = [
+  {
+    phase: "INITIAL_ACCESS",
+    techniqueId: "T0886",
+    techniqueName: "Remote System Discovery / Credential Access",
+    sourceAssetId: "EWS-04",
+    targetAssetId: "EWS-04",
+    parameters: { method: "credential_replay" },
+  },
+  {
+    phase: "LATERAL_MOVEMENT",
+    techniqueId: "T0886",
+    techniqueName: "Lateral Movement across SCADA LAN",
+    sourceAssetId: "EWS-04",
+    targetAssetId: "HMI-11",
+    parameters: { protocol: "OPC-UA" },
+  },
+  {
+    phase: "COMMAND_INJECTION",
+    techniqueId: "T0855",
+    techniqueName: "Unauthorized Command Message to Dosing Controller",
+    sourceAssetId: "HMI-11",
+    targetAssetId: "PLC-DOSE",
+    parameters: { register: "dosing_setpoint", value: 7.2 },
+  },
+  {
+    phase: "TAMPERING",
+    techniqueId: "T0814",
+    techniqueName: "False Data Injection / Sensor Spoof",
+    sourceAssetId: "PLC-DOSE",
+    targetAssetId: "AIT-301",
+    parameters: { action: "spoof_sensor", offset: -4.0 },
+  },
+] as const;

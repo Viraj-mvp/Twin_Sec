@@ -4,13 +4,13 @@
  */
 
 export function pushNavLocation(location: string) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !location) return;
   try {
     const stackStr = sessionStorage.getItem("twinsec_nav_history");
     const stack: string[] = stackStr ? JSON.parse(stackStr) : [];
     if (stack[stack.length - 1] !== location) {
       stack.push(location);
-      if (stack.length > 20) stack.shift();
+      if (stack.length > 30) stack.shift();
       sessionStorage.setItem("twinsec_nav_history", JSON.stringify(stack));
     }
   } catch (e) {
@@ -19,16 +19,22 @@ export function pushNavLocation(location: string) {
 }
 
 export function popNavLocation(): string {
-  if (typeof window === "undefined") return "/";
+  if (typeof window === "undefined") return "";
   try {
     const stackStr = sessionStorage.getItem("twinsec_nav_history");
     const stack: string[] = stackStr ? JSON.parse(stackStr) : [];
-    stack.pop(); // Remove current page
-    const previous = stack.pop(); // Get previous page
+    const currentPath = window.location.pathname;
+
+    // Pop current route(s) if at top of stack
+    while (stack.length > 0 && stack[stack.length - 1] === currentPath) {
+      stack.pop();
+    }
+
+    const previous = stack.pop(); // Retrieve actual prior route
     sessionStorage.setItem("twinsec_nav_history", JSON.stringify(stack));
-    return previous || "/";
+    return previous || "";
   } catch (e) {
-    return "/";
+    return "";
   }
 }
 
@@ -64,21 +70,24 @@ export function getLastSection(): string {
  * Smart Back-Navigation Execution
  * Returns the user to the exact page or section accessed right before the current view.
  */
-export function handleSmartBack(e?: React.MouseEvent, fallbackPath = "/") {
+export function handleSmartBack(e?: React.MouseEvent, fallbackPath = "/briefings") {
   if (e) e.preventDefault();
   if (typeof window !== "undefined") {
-    // If browser history has a previous entry within the same domain, use native history back
-    if (
-      window.history.length > 1 &&
-      document.referrer &&
-      document.referrer.includes(window.location.host)
-    ) {
+    // 1. Pop from verified in-app session navigation stack
+    const prev = popNavLocation();
+    if (prev && prev !== window.location.pathname) {
+      window.location.href = prev;
+      return;
+    }
+
+    // 2. If browser has internal history entries, navigate back
+    if (window.history.length > 1) {
       window.history.back();
       return;
     }
-    // Fallback to nav location stack
-    const prev = popNavLocation();
-    window.location.href = prev || fallbackPath;
+
+    // 3. Fallback to appropriate parent route
+    window.location.href = fallbackPath;
   }
 }
 

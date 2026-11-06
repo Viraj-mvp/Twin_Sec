@@ -19,9 +19,9 @@ import type {
 } from "@/simulation/scenarios/types";
 import type { SectorId } from "@/data/scenarios";
 import { CommandExplanationModal } from "./CommandExplanationModal";
-import { TwinSecLogo } from "@/components/TwinSecLogo";
-import { CyberRadarCanvas } from "@/components/CyberRadarCanvas";
-import { CyberNetworkCanvas } from "@/components/CyberNetworkCanvas";
+import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
+import { CyberRadarCanvas } from "@/components/canvas/CyberRadarCanvas";
+import { CyberNetworkCanvas } from "@/components/canvas/CyberNetworkCanvas";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -241,7 +241,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({
                   <span
                     className={`font-black text-sm uppercase tracking-wider ${selectedRole === "BLUE" ? "text-[#00F0FF]" : "text-zinc-300"}`}
                   >
-                    🛡️ BLUE CELL (DEFENDER)
+                    [BLUE CELL · DEFENDER]
                   </span>
                 </div>
                 {selectedRole === "BLUE" && (
@@ -279,7 +279,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({
                   <span
                     className={`font-black text-sm uppercase tracking-wider ${selectedRole === "RED" ? "text-[#FF2E55]" : "text-zinc-300"}`}
                   >
-                    ⚔️ RED CELL (ATTACKER)
+                    [RED CELL · ATTACKER]
                   </span>
                 </div>
                 {selectedRole === "RED" && (
@@ -736,7 +736,7 @@ export const MissionBriefing: React.FC<MissionBriefingProps> = ({
             ← RETURN TO SCENARIO SELECTION
           </button>
           <span className="bg-black text-[#BFFF2E] px-2.5 py-0.5 border border-[#BFFF2E]/40 font-black">
-            TWINSEC v1 // CLASSIFIED BRIEFING
+            TWINSEC v1.0.0 // CLASSIFIED BRIEFING
           </span>
         </footer>
       </main>

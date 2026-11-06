@@ -7,19 +7,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-.output
-.vinxi
+# Node & Build Artifacts
+node_modules/
+dist/
+dist-ssr/
+.output/
+.vinxi/
 .tanstack/**
-.nitro
+.nitro/
+
+# Environment Variables & Secrets
 *.local
 .env
 .env.local
 .env.*.local
+*.pem
+*.key
 
-# Local database files
+# Local SQLite Database Files
 /data/
 *.db
 *.db-shm
@@ -29,29 +34,40 @@ dist-ssr
 .wrangler/
 .dev.vars
 
-# Editor directories and files
+# Editor, OS & Local Tool Directories
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-# AI Agents & Design Documents
+.claude/
+.arko/
+.mcp.json
 .cursorrules
+
+# AI Agents, Benchmarks & Scratch Artifacts
 SKILL.md
-AGENTS.md
 RESEARCH_GROUNDING.md
 LOGO_PROMPT.md
 BRUTALIST_MINIMALIST_REDESIGN.md
 implementation_plan*
+*remediation_plan*
+*REMEDIATION_PLAN*
 digital-twin-security-reference.md
-docs/
 diagrams/
-scripts/generate_report.py
+docs/
 PROJECT_CONTEXT.md
-TwinSec_Final_Project_Report.docx
-TwinSec_Final_Project_Report.md
+*.docx
+scratch/
+
+# Raw Datasets & Benchmarks
+dataset/
+
+# Test Coverage
+coverage/
+__pycache__/
+*.pyc

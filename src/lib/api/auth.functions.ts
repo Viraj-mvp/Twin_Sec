@@ -14,7 +14,7 @@ import {
   deleteSessionCookie,
   cleanExpiredSessions,
 } from "../auth.server";
-import { checkRateLimit, LIMITS } from "../rate-limit.server";
+import { checkRateLimit, LIMITS, getClientIp } from "../rate-limit.server";
 
 // Standard session response interface
 export interface OperatorSession {
@@ -24,6 +24,9 @@ export interface OperatorSession {
   clearance: string;
   role: string;
   loggedIn: boolean;
+  preferences?: Record<string, unknown>;
+  sessionExpired?: boolean;
+  reason?: string;
 }
 
 const RegisterInput = z.object({
@@ -45,7 +48,8 @@ export const registerOperator = createServerFn({ method: "POST" })
   .validator(RegisterInput)
   .handler(async ({ data }) => {
     await cleanExpiredSessions();
-    const rl = checkRateLimit("auth_register:global", LIMITS.auth_register);
+    const clientIp = getClientIp();
+    const rl = checkRateLimit(`auth_register:${clientIp}`, LIMITS.auth_register);
     if (!rl.allowed) {
       throw new Error(
         `Rate limit exceeded for registration. Try again after ${new Date(rl.resetAt).toLocaleTimeString()}`,
@@ -57,22 +61,23 @@ export const registerOperator = createServerFn({ method: "POST" })
       where: eq(operators.callsign, uppercaseCallsign),
     });
 
-    if (existingCallsign) {
-      throw new Error("Callsign is already registered.");
-    }
-
     const normalizedEmail = data.email.toLowerCase();
     const existingEmail = await db.query.operators.findFirst({
       where: eq(operators.email, normalizedEmail),
     });
-    if (existingEmail) {
-      throw new Error("Email address is already registered.");
+
+    if (existingCallsign || existingEmail) {
+      throw new Error(
+        "Registration failed. An account with these credentials cannot be registered. Please verify your credentials or log in.",
+      );
     }
 
     const badgeId = data.badgeId
       ? data.badgeId.toUpperCase()
       : `OP-${Math.floor(1000 + Math.random() * 9000)}`;
-    const clearance = data.clearance || "TS/SCI · RED LEVEL";
+    // Server-authoritative clearance assignment: prevent client-side privilege escalation
+    // All new registrants start at standard operator tier: "RESTRICTED · OPERATOR LEVEL"
+    const clearance = "RESTRICTED · OPERATOR LEVEL";
     const passwordHash = await hashPassword(data.password);
     const newId = crypto.randomUUID();
 
@@ -265,9 +270,40 @@ export const getOperatorSession = createServerFn({ method: "GET" }).handler(asyn
     clearance: operator.clearance || "TS/SCI · RED LEVEL",
     role: operator.role,
     loggedIn: true,
+    preferences: operator.preferencesJson ? JSON.parse(operator.preferencesJson) : undefined,
     sessionExpired: false,
   };
 });
+
+const PreferencesInput = z.object({
+  theme: z.enum(["neon", "amber", "monochrome"]).optional(),
+  radarSound: z.boolean().optional(),
+  hapticFeedback: z.boolean().optional(),
+  defaultSector: z
+    .enum(["power", "water", "oil-gas", "manufacturing", "port", "smart-building", "smart-city"])
+    .optional(),
+  siemAutoExport: z.boolean().optional(),
+});
+
+export const updateOperatorPreferences = createServerFn({ method: "POST" })
+  .validator(PreferencesInput)
+  .handler(async ({ data }) => {
+    const token = getSessionCookie();
+    const operator = await getSessionOperator(token);
+    if (!operator) {
+      return { success: false, reason: "unauthorized" };
+    }
+
+    const currentPrefs = operator.preferencesJson ? JSON.parse(operator.preferencesJson) : {};
+    const sanitizedPrefs = { ...currentPrefs, ...data };
+
+    await db
+      .update(operators)
+      .set({ preferencesJson: JSON.stringify(sanitizedPrefs) })
+      .where(eq(operators.id, operator.id));
+
+    return { success: true, preferences: sanitizedPrefs };
+  });
 
 export const getCurrentOperator = getOperatorSession;
 

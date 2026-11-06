@@ -7,16 +7,18 @@ import {
   useLocation,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 
 import "../styles.css";
 import appCss from "../styles.css?url";
 import { reportError } from "../lib/error-reporting";
-import { CookieConsent } from "@/components/CookieConsent";
-import { KineticOperatorNav } from "@/components/KineticOperatorNav";
+import { CookieConsent } from "@/components/layout/CookieConsent";
+import { KineticOperatorNav } from "@/components/layout/KineticOperatorNav";
 import { usePreferences } from "@/lib/auth-store";
 import { OperatorProvider } from "@/contexts/OperatorContext";
+import { pushNavLocation } from "@/lib/nav-stack";
 
 function NotFoundComponent() {
   return (
@@ -43,9 +45,10 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
+  const err = error as Error | undefined;
   useEffect(() => {
     reportError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
@@ -60,9 +63,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           Tactical Matrix Exception
         </h1>
         <p className="mt-2 text-xs text-foreground/60 leading-relaxed">
-          An unhandled exception occurred in the live view pipeline. Re-initialize state or return
-          home.
+          {err?.message || "An unhandled exception occurred in the live view pipeline."}
         </p>
+        {process.env.NODE_ENV !== "production" && err?.stack && (
+          <pre className="mt-3 p-2 bg-black/70 border border-rule text-[10px] text-red-400 text-left overflow-x-auto max-h-36">
+            {err.stack.split("\n").slice(0, 5).join("\n")}
+          </pre>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button
             type="button"
@@ -136,6 +143,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [prefs] = usePreferences();
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && pathname) {
+      pushNavLocation(pathname);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

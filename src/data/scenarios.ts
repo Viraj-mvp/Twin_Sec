@@ -1,3 +1,4 @@
+// SECURITY: Static developer-authored scenario data — no CSV injection or user-controlled input risk
 const SECTOR_IDS = [
   "power",
   "water",
@@ -33,6 +34,7 @@ export type Event = {
   title: string;
   desc: string;
   sev: Severity;
+  mitreId?: string;
 };
 
 export type ChoiceId = "ACT" | "DEFER" | "MISS";
@@ -197,6 +199,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Spear-phish accepted",
     desc: "Macro payload runs on engineering workstation EWS-04. Beacon established to attacker C2.",
     sev: "MEDIUM",
+    mitreId: "T0817",
   },
   {
     t: 862,
@@ -205,6 +208,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Historian fingerprinted",
     desc: "OSIsoft PI node enumerated. 14 protocol anomalies on Modbus/TCP.",
     sev: "HIGH",
+    mitreId: "T0846",
   },
   {
     t: 1244,
@@ -213,6 +217,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "HMI credential replay",
     desc: "Cached operator credentials reused. Unsegmented OT VLAN crossed in 6 seconds.",
     sev: "HIGH",
+    mitreId: "T0886",
   },
   {
     t: 3731,
@@ -221,6 +226,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Project file checked out",
     desc: "Engineering software opened. Project file staged for modification.",
     sev: "MEDIUM",
+    mitreId: "T0877",
   },
   {
     t: 6489,
@@ -229,6 +235,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Ladder logic overwritten",
     desc: "Rungs 14–16 silently rewritten. Checksum spoofed. Operator does not know.",
     sev: "CRITICAL",
+    mitreId: "T1692.001",
   },
   {
     t: 7820,
@@ -237,6 +244,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Setpoint drift initiated",
     desc: "Speed setpoint walked +0.3 Hz/s. Within tolerance band — invisible to alarm system.",
     sev: "CRITICAL",
+    mitreId: "T0831",
   },
   {
     t: 9120,
@@ -245,6 +253,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Safety interlock bypassed",
     desc: "Safety logic solver re-tasked. Trip thresholds disarmed.",
     sev: "CRITICAL",
+    mitreId: "T0837",
   },
   {
     t: 9520,
@@ -253,6 +262,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Resonance band entered",
     desc: "Bearing temperature +84°C. Vibration crossed mechanical envelope.",
     sev: "CRITICAL",
+    mitreId: "T0828",
   },
   {
     t: 9541,
@@ -261,6 +271,7 @@ const DEFAULT_EVENTS: readonly Event[] = [
     title: "Breaker 33-B latched",
     desc: "Cascading isolation. 14 MW load shed. Downstream pressure loss in feeder loop.",
     sev: "CRITICAL",
+    mitreId: "T0879",
   },
 ];
 
