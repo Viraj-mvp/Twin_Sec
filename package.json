@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "twinsec",
-  "version": "2.4.0",
+  "version": "1.0.0",
   "description": "TwinSec Industrial Cyber Range & Digital Twin Security Simulator",
   "private": true,
   "sideEffects": false,
