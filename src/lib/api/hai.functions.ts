@@ -36,8 +36,22 @@ export const evaluateHaiAttackWindowFn = createServerFn({ method: "POST" })
     const threshold = data.threshold ?? 2.5;
     const evaluation = evaluateTelemetrySeries(windowRes.rows, threshold);
 
-    // Correlate the highest scoring anomaly row
-    const worstRow = windowRes.rows.find((r) => r.label === 1) || windowRes.rows[0];
+    // Correlate the highest scoring anomaly row (guard empty telemetry windows)
+    const fallbackRow = {
+      timestamp: windowRes.queryStartTime || new Date().toISOString(),
+      label: 0,
+      p1_pressure: 0,
+      p1_temperature: 0,
+      p1_flow: 0,
+      p1_level: 0,
+      p2_speed: 0,
+      p2_vibration: 0,
+      p3_flow: 0,
+      p3_level: 0,
+      p4_steam_pressure: 0,
+      p4_steam_temperature: 0,
+    };
+    const worstRow = windowRes.rows.find((r) => r.label === 1) ?? windowRes.rows[0] ?? fallbackRow;
     const inference = classifyHaiRow(worstRow, threshold);
     const advisory = correlationEngine.correlate(inference, "manufacturing");
 

@@ -64,8 +64,17 @@ PROJECT_CONTEXT.md
 *.docx
 scratch/
 
-# Raw Datasets & Benchmarks
-dataset/
+# Raw Datasets & Benchmarks (track only active runtime datasets for Vercel/CI)
+dataset/*
+!dataset/mitre/
+!dataset/mitre/ics-attack.json
+!dataset/otcad/
+!dataset/otcad/cyberattacks.json
+!dataset/hai/
+!dataset/hai/hai-23.05/
+!dataset/hai/hai-23.05/hai-test1.csv
+!dataset/hai/hai-23.05/label-test1.csv
+!dataset/hai/hai-23.05/summary_label1.txt
 
 # Test Coverage
 coverage/
