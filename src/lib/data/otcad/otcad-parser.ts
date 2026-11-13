@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { OtcadAttackRecord, OtcadSummary } from "./types";
 import { resolveDatasetPath } from "../dataset-path";
+import embeddedOtcadData from "./cyberattacks.json";
 
 export class OtcadParser {
   private records: OtcadAttackRecord[] = [];
@@ -22,17 +23,23 @@ export class OtcadParser {
     if (this.loaded) return true;
 
     try {
-      if (!fs.existsSync(this.filePath)) {
-        console.warn(`[OTCAD Parser] Dataset file not found at: ${this.filePath}`);
-        return false;
+      let data: unknown[] | null = null;
+
+      if (this.filePath && fs.existsSync(this.filePath)) {
+        try {
+          const raw = fs.readFileSync(this.filePath, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            data = parsed;
+          }
+        } catch {
+          data = null;
+        }
       }
 
-      const raw = fs.readFileSync(this.filePath, "utf-8");
-      const data: unknown[] = JSON.parse(raw);
-
-      if (!Array.isArray(data)) {
-        console.warn(`[OTCAD Parser] Expected array of records in ${this.filePath}`);
-        return false;
+      // Fallback to embedded bundled records if filesystem access fails (e.g. Vercel Serverless)
+      if (!data) {
+        data = embeddedOtcadData as unknown[];
       }
 
       this.records = data.map((item) => this.enrichRecord(item as Record<string, unknown>));

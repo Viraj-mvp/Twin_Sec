@@ -23,12 +23,21 @@ export default async function handler(req, res) {
 
     let body = null;
     if (req.method !== "GET" && req.method !== "HEAD") {
-      body = await new Promise((resolve, reject) => {
-        const chunks = [];
-        req.on("data", (chunk) => chunks.push(chunk));
-        req.on("end", () => resolve(Buffer.concat(chunks)));
-        req.on("error", reject);
-      });
+      if (req.body !== undefined && req.body !== null) {
+        body =
+          typeof req.body === "string"
+            ? req.body
+            : Buffer.isBuffer(req.body)
+              ? req.body
+              : JSON.stringify(req.body);
+      } else if (!req.readableEnded && req.readable) {
+        body = await new Promise((resolve, reject) => {
+          const chunks = [];
+          req.on("data", (chunk) => chunks.push(chunk));
+          req.on("end", () => resolve(Buffer.concat(chunks)));
+          req.on("error", reject);
+        });
+      }
     }
 
     const webRequest = new Request(fullUrl, {

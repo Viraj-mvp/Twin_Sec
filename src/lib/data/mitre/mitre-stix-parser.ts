@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { MitreTechnique, MitreTactic, MitreMitigation, MitreCatalogSummary } from "./types";
 import { resolveDatasetPath } from "../dataset-path";
+import embeddedMitreBundle from "./ics-attack.json";
 
 interface StixRelationship {
   type: "relationship";
@@ -44,16 +45,27 @@ export class MitreStixParser {
     if (this.loaded) return true;
 
     try {
-      if (!fs.existsSync(this.bundlePath)) {
-        console.warn(`[MITRE Parser] STIX bundle not found at: ${this.bundlePath}`);
-        return false;
+      let bundle: any = null;
+
+      if (this.bundlePath && fs.existsSync(this.bundlePath)) {
+        try {
+          const raw = fs.readFileSync(this.bundlePath, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.objects)) {
+            bundle = parsed;
+          }
+        } catch {
+          bundle = null;
+        }
       }
 
-      const raw = fs.readFileSync(this.bundlePath, "utf-8");
-      const bundle = JSON.parse(raw);
+      // Fallback to embedded bundled STIX bundle if filesystem read fails (e.g. Vercel Serverless)
+      if (!bundle) {
+        bundle = embeddedMitreBundle;
+      }
 
-      if (!bundle.objects || !Array.isArray(bundle.objects)) {
-        console.warn(`[MITRE Parser] Invalid STIX bundle structure in ${this.bundlePath}`);
+      if (!bundle || !bundle.objects || !Array.isArray(bundle.objects)) {
+        console.warn(`[MITRE Parser] Invalid STIX bundle structure`);
         return false;
       }
 
