@@ -64,6 +64,7 @@
     "@tanstack/router-plugin": "^1.167.28",
     "@types/dompurify": "^3.0.5",
     "@types/three": "^0.185.4",
+    "@vercel/speed-insights": "^2.1.0",
     "ai": "^7.0.15",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",

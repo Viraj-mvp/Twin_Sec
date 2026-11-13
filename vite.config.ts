@@ -53,6 +53,7 @@ export default defineConfig({
       "sonner",
       "react-markdown",
       "dompurify",
+      "@vercel/speed-insights/react",
     ],
     exclude: [
       "better-sqlite3",
@@ -63,7 +64,7 @@ export default defineConfig({
     ],
   },
   ssr: {
-    noExternal: ["gsap", "@gsap/react"],
+    noExternal: ["gsap", "@gsap/react", "@vercel/speed-insights"],
     external: ["better-sqlite3", "drizzle-orm/better-sqlite3"],
   },
   build: {
