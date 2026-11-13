@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { OtcadAttackRecord, OtcadSummary } from "./types";
+import { resolveDatasetPath } from "../dataset-path";
 
 export class OtcadParser {
   private records: OtcadAttackRecord[] = [];
@@ -14,7 +15,7 @@ export class OtcadParser {
     this.filePath =
       customPath ||
       process.env.OTCAD_DATASET_PATH ||
-      path.resolve(process.cwd(), "dataset", "otcad", "cyberattacks.json");
+      resolveDatasetPath("otcad", "cyberattacks.json");
   }
 
   public load(): boolean {

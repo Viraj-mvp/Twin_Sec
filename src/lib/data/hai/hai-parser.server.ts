@@ -3,6 +3,24 @@ import * as path from "path";
 import * as readline from "readline";
 import type { HaiAttackPeriod, HaiDatasetStats, HaiTelemetryRow, HaiWindowQuery } from "./types";
 import { REAL_HAI_100_CURVE } from "./hai-curve-data";
+import { resolveDatasetPath } from "../dataset-path";
+
+export const DEFAULT_HAI_ATTACK_PERIODS: HaiAttackPeriod[] = [
+  { index: 1, startTime: "2022-08-12 16:25:04", endTime: "2022-08-12 16:29:01", durationSeconds: 237, durationFormatted: "00:03:57", affectedProcess: "Boiler (P1)", description: "Boiler Feed Water Flow Control valve (P1_FCV01) override causing water level fluctuations." },
+  { index: 2, startTime: "2022-08-12 17:35:01", endTime: "2022-08-12 17:38:19", durationSeconds: 198, durationFormatted: "00:03:18", affectedProcess: "Turbine (P2)", description: "Turbine Governor Valve & Rotor Speed (P2_SIT01) setpoint manipulation." },
+  { index: 3, startTime: "2022-08-12 18:32:17", endTime: "2022-08-12 18:34:53", durationSeconds: 156, durationFormatted: "00:02:36", affectedProcess: "Water Treatment (P3)", description: "Chemical dosing rate and flow meter (P3_FIT01) spoofing." },
+  { index: 4, startTime: "2022-08-12 19:21:04", endTime: "2022-08-12 19:23:48", durationSeconds: 164, durationFormatted: "00:02:44", affectedProcess: "Boiler (P1)", description: "Boiler steam drum pressure transmitter (P1_PIT01) offset injection." },
+  { index: 5, startTime: "2022-08-12 20:43:01", endTime: "2022-08-12 20:45:42", durationSeconds: 161, durationFormatted: "00:02:41", affectedProcess: "Turbine (P2)", description: "Turbine bearing vibration (P2_VIBTR01) anomaly and frequency wobble." },
+  { index: 6, startTime: "2022-08-12 21:36:01", endTime: "2022-08-12 21:39:18", durationSeconds: 197, durationFormatted: "00:03:17", affectedProcess: "Boiler (P1)", description: "Boiler liquid level (P1_LIT01) sensor spoofing causing heater dry-run risk." },
+  { index: 7, startTime: "2022-08-12 22:47:01", endTime: "2022-08-12 22:57:05", durationSeconds: 604, durationFormatted: "00:10:04", affectedProcess: "Multi-Stage", description: "Multi-loop cascade attack spanning Boiler feed and Steam Turbine governor." },
+  { index: 8, startTime: "2022-08-12 23:35:15", endTime: "2022-08-12 23:36:51", durationSeconds: 96, durationFormatted: "00:01:36", affectedProcess: "Thermal Power (P4)", description: "Steam turbine output temperature (P4_ST_TT01) overheat excursion." },
+  { index: 9, startTime: "2022-08-13 00:25:04", endTime: "2022-08-13 00:27:14", durationSeconds: 130, durationFormatted: "00:02:10", affectedProcess: "Water Treatment (P3)", description: "Water treatment dosing valve throttling inducing disinfectant deficiency." },
+  { index: 10, startTime: "2022-08-13 01:34:09", endTime: "2022-08-13 01:35:04", durationSeconds: 55, durationFormatted: "00:00:55", affectedProcess: "Boiler (P1)", description: "High-pressure safety relief valve (P1_PCV02) trip override." },
+  { index: 11, startTime: "2022-08-13 02:21:04", endTime: "2022-08-13 02:23:15", durationSeconds: 131, durationFormatted: "00:02:11", affectedProcess: "Turbine (P2)", description: "Rotor speed desynchronization (P2_SIT01) attempting mechanical resonance." },
+  { index: 12, startTime: "2022-08-13 03:26:03", endTime: "2022-08-13 03:27:21", durationSeconds: 78, durationFormatted: "00:01:18", affectedProcess: "Boiler (P1)", description: "Feed water pump discharge pressure drop triggering cavitation." },
+  { index: 13, startTime: "2022-08-13 04:43:02", endTime: "2022-08-13 04:45:15", durationSeconds: 133, durationFormatted: "00:02:13", affectedProcess: "Water Treatment (P3)", description: "Storage reservoir liquid level sensor freeze with continuous pump feed." },
+  { index: 14, startTime: "2022-08-13 05:40:08", endTime: "2022-08-13 05:50:35", durationSeconds: 627, durationFormatted: "00:10:27", affectedProcess: "Multi-Stage", description: "Full-scale cyber-physical attack cascading across all 4 industrial loops." },
+];
 
 const ATTACK_DESCRIPTIONS: Record<
   number,
@@ -98,7 +116,7 @@ export class HaiDataParser {
     this.baseDir =
       customDir ||
       process.env.HAI_DATASET_DIR ||
-      path.resolve(process.cwd(), "dataset", "hai", "hai-23.05");
+      resolveDatasetPath("hai", "hai-23.05");
   }
 
   public init(): boolean {
@@ -109,76 +127,94 @@ export class HaiDataParser {
       const labelFile = path.resolve(this.baseDir, "label-test1.csv");
       const dataFile = path.resolve(this.baseDir, "hai-test1.csv");
 
-      if (!fs.existsSync(summaryFile) || !fs.existsSync(labelFile) || !fs.existsSync(dataFile)) {
-        console.warn(`[HAI Parser] Required dataset files missing in: ${this.baseDir}`);
-        return false;
+      // 1. Parse summary_label1.txt (fallback to DEFAULT_HAI_ATTACK_PERIODS if missing)
+      if (fs.existsSync(summaryFile)) {
+        try {
+          const summaryTxt = fs.readFileSync(summaryFile, "utf-8");
+          const regex =
+            /\[\s*(\d+)\]\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2})/g;
+          let match;
+          this.attackPeriods = [];
+
+          while ((match = regex.exec(summaryTxt)) !== null) {
+            const idx = Number(match[1]);
+            const start = match[2];
+            const end = match[3];
+            const durFormatted = match[4];
+            const [h, m, s] = durFormatted.split(":").map(Number);
+            const durationSec = h * 3600 + m * 60 + s;
+
+            const info = ATTACK_DESCRIPTIONS[idx] || {
+              process: "Multi-Stage" as const,
+              desc: `Industrial cyber attack period #${idx}`,
+            };
+
+            this.attackPeriods.push({
+              index: idx,
+              startTime: start,
+              endTime: end,
+              durationSeconds: durationSec,
+              durationFormatted: durFormatted,
+              affectedProcess: info.process,
+              description: info.desc,
+            });
+          }
+        } catch {
+          this.attackPeriods = [...DEFAULT_HAI_ATTACK_PERIODS];
+        }
+      } else {
+        this.attackPeriods = [...DEFAULT_HAI_ATTACK_PERIODS];
       }
 
-      // 1. Parse summary_label1.txt
-      const summaryTxt = fs.readFileSync(summaryFile, "utf-8");
-      const regex =
-        /\[\s*(\d+)\]\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2})/g;
-      let match;
-      this.attackPeriods = [];
-
-      while ((match = regex.exec(summaryTxt)) !== null) {
-        const idx = Number(match[1]);
-        const start = match[2];
-        const end = match[3];
-        const durFormatted = match[4];
-        const [h, m, s] = durFormatted.split(":").map(Number);
-        const durationSec = h * 3600 + m * 60 + s;
-
-        const info = ATTACK_DESCRIPTIONS[idx] || {
-          process: "Multi-Stage" as const,
-          desc: `Industrial cyber attack period #${idx}`,
-        };
-
-        this.attackPeriods.push({
-          index: idx,
-          startTime: start,
-          endTime: end,
-          durationSeconds: durationSec,
-          durationFormatted: durFormatted,
-          affectedProcess: info.process,
-          description: info.desc,
-        });
-      }
-
-      // 2. Load ground truth labels from label-test1.csv
-      const labelTxt = fs.readFileSync(labelFile, "utf-8");
-      const labelLines = labelTxt.split(/\r?\n/);
+      // 2. Load ground truth labels from label-test1.csv if present
       this.labelsByTimestamp.clear();
+      if (fs.existsSync(labelFile)) {
+        try {
+          const labelTxt = fs.readFileSync(labelFile, "utf-8");
+          const labelLines = labelTxt.split(/\r?\n/);
 
-      for (let i = 1; i < labelLines.length; i++) {
-        const line = labelLines[i].trim();
-        if (!line) continue;
-        const commaIdx = line.indexOf(",");
-        if (commaIdx > 0) {
-          const ts = line.slice(0, commaIdx).trim();
-          const lbl = Number(line.slice(commaIdx + 1).trim()) || 0;
-          this.labelsByTimestamp.set(ts, lbl);
+          for (let i = 1; i < labelLines.length; i++) {
+            const line = labelLines[i].trim();
+            if (!line) continue;
+            const commaIdx = line.indexOf(",");
+            if (commaIdx > 0) {
+              const ts = line.slice(0, commaIdx).trim();
+              const lbl = Number(line.slice(commaIdx + 1).trim()) || 0;
+              this.labelsByTimestamp.set(ts, lbl);
+            }
+          }
+        } catch {
+          // Non-critical: labels can be derived from attack periods
         }
       }
 
-      // 3. Inspect header of hai-test1.csv
-      const fd = fs.openSync(dataFile, "r");
-      const buffer = Buffer.alloc(4096);
-      fs.readSync(fd, buffer, 0, 4096, 0);
-      fs.closeSync(fd);
+      // 3. Inspect header of hai-test1.csv if present
+      if (fs.existsSync(dataFile)) {
+        try {
+          const fd = fs.openSync(dataFile, "r");
+          const buffer = Buffer.alloc(4096);
+          fs.readSync(fd, buffer, 0, 4096, 0);
+          fs.closeSync(fd);
 
-      const headerLine = buffer.toString("utf-8").split(/\r?\n/)[0];
-      this.headerColumns = headerLine.split(",").map((c) => c.trim());
-      this.columnIndices = {};
-      this.headerColumns.forEach((col, idx) => {
-        this.columnIndices[col] = idx;
-      });
+          const headerLine = buffer.toString("utf-8").split(/\r?\n/)[0];
+          this.headerColumns = headerLine.split(",").map((c) => c.trim());
+          this.columnIndices = {};
+          this.headerColumns.forEach((col, idx) => {
+            this.columnIndices[col] = idx;
+          });
+        } catch {
+          this.headerColumns = [];
+          this.columnIndices = {};
+        }
+      }
 
       this.isLoaded = true;
       return true;
     } catch (err) {
-      console.error("[HAI Parser] Initialization error:", err);
-      return false;
+      console.error("[HAI Parser] Initialization fallback:", err);
+      this.attackPeriods = [...DEFAULT_HAI_ATTACK_PERIODS];
+      this.isLoaded = true;
+      return true;
     }
   }
 

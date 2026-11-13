@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { MitreTechnique, MitreTactic, MitreMitigation, MitreCatalogSummary } from "./types";
+import { resolveDatasetPath } from "../dataset-path";
 
 interface StixRelationship {
   type: "relationship";
@@ -36,7 +37,7 @@ export class MitreStixParser {
     this.bundlePath =
       customPath ||
       process.env.MITRE_ICS_PATH ||
-      path.resolve(process.cwd(), "dataset", "mitre", "ics-attack.json");
+      resolveDatasetPath("mitre", "ics-attack.json");
   }
 
   public load(): boolean {

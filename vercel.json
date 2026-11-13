@@ -5,7 +5,11 @@
   "outputDirectory": "dist/client",
   "functions": {
     "api/index.js": {
-      "includeFiles": "{dist/server/**,dataset/**}"
+      "includeFiles": [
+        "dist/server/**",
+        "dataset/**"
+      ],
+      "maxDuration": 60
     }
   },
   "routes": [

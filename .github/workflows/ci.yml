@@ -6,14 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "twinsec-ci-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
   validate:
     name: Build, Lint & Test Suite
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout Repository
@@ -22,7 +25,7 @@ jobs:
       - name: Setup Node.js 22 Runtime
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
           cache: "npm"
 
       - name: Install Dependencies
@@ -39,4 +42,3 @@ jobs:
 
       - name: Compile Production Build Artifacts
         run: npm run build
-
