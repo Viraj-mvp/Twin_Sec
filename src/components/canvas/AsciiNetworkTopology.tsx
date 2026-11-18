@@ -638,8 +638,21 @@ export function AsciiNetworkTopology({ className = "", fps = 24 }: AsciiNetworkT
       return;
     }
 
+    let isVisible = true;
+    let observer: IntersectionObserver | null = null;
+    if (typeof window !== "undefined" && "IntersectionObserver" in window) {
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          isVisible = entry.isIntersecting;
+        },
+        { threshold: 0.05 },
+      );
+      observer.observe(canvas);
+    }
+
     const loop = (now: number) => {
       animId = requestAnimationFrame(loop);
+      if (!isVisible) return;
       if (now - lastDraw < frameInterval) return;
       lastDraw = now - ((now - lastDraw) % frameInterval);
       drawFrame(now);
@@ -649,6 +662,7 @@ export function AsciiNetworkTopology({ className = "", fps = 24 }: AsciiNetworkT
 
     return () => {
       cancelAnimationFrame(animId);
+      observer?.disconnect();
     };
   }, [fps]);
 

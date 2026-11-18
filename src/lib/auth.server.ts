@@ -5,6 +5,11 @@ import { db, schema } from "./db";
 import { eq, and, gt, lt } from "drizzle-orm";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || "twinsec-cyber-range-default-hmac-key-2026";
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  console.warn(
+    "[SECURITY WARNING] SESSION_SECRET is not configured in production environment. Using default fallback key. Please define SESSION_SECRET in production deployment.",
+  );
+}
 
 function signSessionToken(token: string): string {
   const hmac = crypto.createHmac("sha256", SESSION_SECRET).update(token).digest("base64url");

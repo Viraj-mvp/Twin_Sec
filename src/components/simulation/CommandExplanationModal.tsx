@@ -22,11 +22,11 @@ export const CommandExplanationModal: React.FC<CommandExplanationModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-end bg-background/80 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-end bg-black/80 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl h-full bg-background border-l border-rule p-6 sm:p-8 overflow-y-auto flex flex-col gap-6 shadow-2xl"
+        className="w-full max-w-xl h-full bg-background border-l-2 border-rule p-6 sm:p-8 overflow-y-auto flex flex-col gap-6 shadow-comic"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-rule pb-4">
@@ -35,8 +35,9 @@ export const CommandExplanationModal: React.FC<CommandExplanationModalProps> = (
             <h3 className="display text-2xl sm:text-3xl mt-1">Command Analysis</h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="mono-label px-3 py-1 border border-rule hover:bg-foreground hover:text-background transition-colors"
+            className="mono-label px-3 py-1.5 border-2 border-rule hover:bg-foreground hover:text-background transition-colors min-h-[44px] flex items-center justify-center cursor-pointer font-bold"
           >
             CLOSE [ESC]
           </button>

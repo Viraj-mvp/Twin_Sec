@@ -41,7 +41,13 @@ const RegisterInput = z.object({
   email: z.string().email("Invalid email format"),
   badgeId: z.string().optional(),
   clearance: z.string().optional(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z
+    .string()
+    .min(12, "Password sequence key must be at least 12 characters")
+    .regex(/[A-Z]/, "Password must include at least one uppercase letter")
+    .regex(/[a-z]/, "Password must include at least one lowercase letter")
+    .regex(/[0-9]/, "Password must include at least one digit")
+    .regex(/[^A-Za-z0-9]/, "Password must include at least one special character"),
 });
 
 export const registerOperator = createServerFn({ method: "POST" })

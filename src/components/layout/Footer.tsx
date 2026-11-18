@@ -89,14 +89,49 @@ export function Footer() {
         </div>
 
         <div className="col-span-12 sm:col-span-4 lg:col-span-3 space-y-4">
-          <p className="mono-label text-accent font-bold">SECTORS</p>
+          <p className="mono-label text-accent font-bold">SECTORS (7 ONLINE)</p>
           <div className="flex flex-wrap gap-2 font-mono text-[10px]">
-            {["POWER", "WATER", "OIL & GAS", "MANUFACTURING", "PORT", "SMART CITY"].map((s) => (
+            {[
+              "POWER",
+              "WATER",
+              "OIL & GAS",
+              "MANUFACTURING",
+              "PORT",
+              "SMART BUILDING",
+              "SMART CITY",
+            ].map((s) => (
               <span key={s} className="px-2 py-1 border border-rule bg-card text-foreground/70">
                 {s}
               </span>
             ))}
           </div>
+
+          <div className="pt-2">
+            <p className="mono-label text-accent font-bold mb-2">COMPLIANCE & PROTOCOL</p>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-foreground/70">
+              <li>
+                <Link to="/privacy" className="hover:text-accent transition-colors">
+                  PRIVACY
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="hover:text-accent transition-colors">
+                  TERMS
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="/.well-known/security.txt"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-accent transition-colors"
+                >
+                  SECURITY.TXT
+                </a>
+              </li>
+            </ul>
+          </div>
+
           <div className="pt-4 border-t border-rule/50 flex flex-col gap-2 font-mono text-xs text-foreground/50">
             <span>DEF CON 33 · S4X26 · USENIX SECURITY</span>
             <span>© 2026 TWINSEC INC. ALL RIGHTS RESERVED.</span>

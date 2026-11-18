@@ -9,6 +9,7 @@ import { AssetDossierTab } from "@/components/simulation/AssetDossierTab";
 import { computeBlastRadius, type BlastRadiusResult } from "@/lib/simulation/blast-radius";
 import { resolveSectorNode, translateSectorCommand } from "@/lib/simulation/sector-aliases";
 import { MissionBriefing } from "@/components/simulation/MissionBriefing";
+import { generateForensicDossierPDF } from "@/lib/pdf-debrief-generator";
 import { log } from "@/lib/logger";
 
 const ExplainableAIPanel = lazy(() =>
@@ -3174,225 +3175,26 @@ function SimulationPage() {
     try {
       const wasPlaying = playing;
       setPlaying(false);
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      const [{ toPng }, { default: jsPDF }] = await Promise.all([
-        import("html-to-image"),
-        import("jspdf"),
-      ]);
-
-      const bg = "#0a0a0c";
-      const fg = "#f4efe6";
-      const accent = "#bfff2e";
-      const ink = "#1a1a1d";
-
-      // Snapshot the live topology + right-rail frame summary
-      const topo = document.getElementById("snapshot-topology");
-      const frame = document.getElementById("snapshot-frame");
-
-      const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
-      const W = pdf.internal.pageSize.getWidth();
-      const H = pdf.internal.pageSize.getHeight();
-      const M = 36;
-
-      const drawChrome = (pageLabel: string) => {
-        pdf.setFillColor(bg);
-        pdf.rect(0, 0, W, H, "F");
-        pdf.setDrawColor(60, 60, 64);
-        pdf.setLineWidth(0.5);
-        pdf.line(M, 56, W - M, 56);
-        pdf.setTextColor(fg);
-        pdf.setFont("courier", "bold");
-        pdf.setFontSize(8);
-        pdf.text("TWINSEC · OPERATOR DOSSIER", M, 44);
-        pdf.text(pageLabel, W - M, 44, { align: "right" });
-        pdf.setTextColor(accent);
-        pdf.text(`HW-${outcome.dossierId}`, M, H - 22);
-        pdf.setTextColor(fg);
-        pdf.text(
-          `T+${fmt(t)} · ${Math.round(targetSpeed)}× · BRANCH ${outcome.branch}`,
-          W - M,
-          H - 22,
-          { align: "right" },
-        );
-
-        if (!operator?.loggedIn) {
-          pdf.setFont("courier", "bold");
-          pdf.setFontSize(7.5);
-          pdf.setTextColor(255, 191, 46); // Acid Amber
-          pdf.text("[GUEST AUDIT TRIAL · SAMPLE EXPORT 1/1 · REGISTER TO CERTIFY]", W / 2, 44, {
-            align: "center",
-          });
-        }
-      };
-
-      // PAGE 1 — COVER
-      drawChrome("P. 01 / 04 · COVER");
-      pdf.setTextColor(fg);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(56);
-      pdf.text("EXERCISE", M, 140);
-      pdf.text(`${exercise.title}.`, M, 200);
-      pdf.setFont("times", "italic");
-      pdf.setFontSize(14);
-      pdf.setTextColor(220, 220, 210);
-      const cover = pdf.splitTextToSize(
-        `${exercise.site}. A ${Math.round(TOTAL)}-second incident, captured at frame T+${fmt(t)} of ${fmt(TOTAL)}. Branch ${outcome.branch}. ${outcome.narrative}`,
-        W - M * 2,
-      );
-      pdf.text(cover, M, 240);
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(9);
-      pdf.setTextColor(fg);
-      const stats: [string, string][] = [
-        ["OPERATOR", "N. ARENS"],
-        ["ADVERSARY", exercise.adversary],
-        [outcome.impactLabel, outcome.impactFormatted],
-        ["MTTD", outcome.mttd],
-        ["MTTR", outcome.mttr],
-        ["COST", outcome.cost],
-        ["TRANSPORT PACE", `${Math.round(targetSpeed)}×`],
-        ["DECISIONS", `${Object.keys(choices).length}/${DECISIONS.length}`],
-      ];
-      stats.forEach(([k, v], i) => {
-        const x = M + (i % 2) * (W / 2 - M);
-        const y = 360 + Math.floor(i / 2) * 28;
-        pdf.setTextColor(140, 140, 140);
-        pdf.text(k, x, y);
-        pdf.setTextColor(fg);
-        pdf.setFontSize(14);
-        pdf.text(v, x + 120, y);
-        pdf.setFontSize(9);
+      const pdf = await generateForensicDossierPDF({
+        exercise,
+        outcome,
+        sector,
+        operator,
+        nodes: NODES,
+        edges: EDGES,
+        compromisedNodes,
+        isolatedNodes,
+        choices,
+        decisions: DECISIONS,
+        events: EVENTS,
+        activeIdx,
+        totalTime: TOTAL,
+        targetSpeed,
+        terminalLogs,
+        blastRadius: blastRadiusResult || activeNodeBlastRadius,
+        historicalAttack: activeHistoricalAttack,
       });
-
-      // PAGE 2 — TOPOLOGY SNAPSHOT
-      if (topo) {
-        pdf.addPage();
-        drawChrome("P. 02 / 04 · TOPOLOGY SNAPSHOT");
-        const img = await toPng(topo, { backgroundColor: bg, pixelRatio: 2, cacheBust: true });
-        const dims = await new Promise<{ w: number; h: number }>((res) => {
-          const im = new Image();
-          im.onload = () => res({ w: im.width, h: im.height });
-          im.src = img;
-        });
-        const ratio = dims.h / dims.w;
-        const iw = W - M * 2;
-        const ih = Math.min(H - 180, iw * ratio);
-        pdf.setTextColor(fg);
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(22);
-        pdf.text("FIG. 01 — PROPAGATION TOPOLOGY", M, 92);
-        pdf.setFont("courier", "normal");
-        pdf.setFontSize(8);
-        pdf.setTextColor(160, 160, 160);
-        pdf.text(
-          `Captured at T+${fmt(t)} · ${compromisedNodes.size}/${NODES.length} nodes compromised · cascade depth ${Math.max(0, ...NODES.filter((n) => compromisedNodes.has(n.id)).map((n) => n.ring))}/5`,
-          M,
-          108,
-        );
-        pdf.addImage(img, "PNG", M, 124, iw, ih);
-      }
-
-      // PAGE 3 — CURRENT FRAME + INCIDENT LOG
-      pdf.addPage();
-      drawChrome("P. 03 / 04 · INCIDENT LOG");
-      pdf.setTextColor(fg);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(28);
-      pdf.text("INCIDENT LOG", M, 96);
-      if (frame) {
-        const fimg = await toPng(frame, { backgroundColor: bg, pixelRatio: 2, cacheBust: true });
-        const fdims = await new Promise<{ w: number; h: number }>((res) => {
-          const im = new Image();
-          im.onload = () => res({ w: im.width, h: im.height });
-          im.src = fimg;
-        });
-        const fr = fdims.h / fdims.w;
-        const fw = (W - M * 2) * 0.42;
-        pdf.addImage(fimg, "PNG", W - M - fw, 116, fw, fw * fr);
-      }
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(8.5);
-      let y = 130;
-      const colW = (W - M * 2) * 0.55;
-      EVENTS.forEach((e, i) => {
-        const reached = i <= activeIdx;
-        pdf.setTextColor(
-          reached ? (e.sev === "CRITICAL" ? 255 : 220) : 90,
-          reached ? (e.sev === "CRITICAL" ? 90 : 220) : 90,
-          reached ? 90 : 90,
-        );
-        pdf.text(`T+${fmt(e.t)}`, M, y);
-        pdf.setTextColor(reached ? 255 : 110, reached ? 255 : 110, reached ? 255 : 110);
-        pdf.text(`${e.tag} · ${e.node.toUpperCase()}`, M + 60, y);
-        pdf.setFont("times", reached ? "italic" : "normal");
-        pdf.setFontSize(10);
-        const lines = pdf.splitTextToSize(e.title, colW);
-        pdf.text(lines, M, y + 14);
-        pdf.setFont("courier", "normal");
-        pdf.setFontSize(8.5);
-        y += 14 + lines.length * 12 + 8;
-        if (y > H - 80) {
-          pdf.addPage();
-          drawChrome("P. 03 / 04 · INCIDENT LOG (cont.)");
-          y = 96;
-        }
-      });
-
-      // PAGE 4 — DECISIONS + OUTCOME
-      pdf.addPage();
-      drawChrome("P. 04 / 04 · DECISIONS & OUTCOME");
-      pdf.setFillColor(ink);
-      pdf.rect(0, 56, W, H - 78, "F");
-      pdf.setTextColor(fg);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(28);
-      pdf.text("OPERATOR DECISIONS", M, 96);
-      let dy = 130;
-      DECISIONS.forEach((d) => {
-        const c = choices[d.id];
-        const opt = c ? d.options.find((o) => o.id === c) : null;
-        pdf.setFont("courier", "bold");
-        pdf.setFontSize(8);
-        pdf.setTextColor(160, 160, 160);
-        pdf.text(`T+${fmt(d.t)} · ${d.trigger.toUpperCase()}`, M, dy);
-        pdf.setTextColor(accent);
-        pdf.text(c ?? "NOT TAKEN", W - M, dy, { align: "right" });
-        pdf.setFont("times", "italic");
-        pdf.setFontSize(13);
-        pdf.setTextColor(fg);
-        const q = pdf.splitTextToSize(d.question, W - M * 2);
-        pdf.text(q, M, dy + 16);
-        dy += 16 + q.length * 14 + 4;
-        if (opt) {
-          pdf.setFont("courier", "normal");
-          pdf.setFontSize(9);
-          pdf.setTextColor(200, 200, 200);
-          const cn = pdf.splitTextToSize(`→ ${opt.consequence}`, W - M * 2);
-          pdf.text(cn, M, dy);
-          dy += cn.length * 12 + 14;
-        } else {
-          dy += 18;
-        }
-      });
-      pdf.setDrawColor(80);
-      pdf.line(M, dy, W - M, dy);
-      dy += 28;
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(48);
-      pdf.setTextColor(fg);
-      pdf.text(outcome.mw === 0 ? "ZERO IMPACT" : `${outcome.impactFormatted}`, M, dy + 36);
-      pdf.setTextColor(accent);
-      pdf.setFontSize(20);
-      pdf.text(outcome.duration, M, dy + 64);
-      pdf.setTextColor(160, 160, 160);
-      pdf.setFont("courier", "normal");
-      pdf.setFontSize(9);
-      pdf.text(
-        `${outcome.alarms} · MTTD ${outcome.mttd} · MTTR ${outcome.mttr} · ${outcome.cost}`,
-        M,
-        dy + 84,
-      );
 
       pdf.save(`twinsec-dossier-HW-${outcome.dossierId}.pdf`);
       // Auto-persist drill to operator ledger (local for guest, DB for operator)
@@ -3421,15 +3223,22 @@ function SimulationPage() {
     choices,
     outcome,
     compromisedNodes,
+    isolatedNodes,
+    terminalLogs,
     activeIdx,
     playing,
     exercise,
+    sector,
     saveDrillToLedger,
-    operator?.loggedIn,
+    operator,
     DECISIONS,
     EVENTS,
     NODES,
+    EDGES,
     TOTAL,
+    blastRadiusResult,
+    activeNodeBlastRadius,
+    activeHistoricalAttack,
   ]);
 
   return (

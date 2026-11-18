@@ -221,6 +221,8 @@ if (!globalThis.__twinsec_db_initialized) {
 
   CREATE INDEX IF NOT EXISTS idx_sessions_token_expires ON sessions(token, expires_at);
   CREATE INDEX IF NOT EXISTS idx_sessions_operator_id ON sessions(operator_id);
+  CREATE INDEX IF NOT EXISTS idx_training_runs_operator_created ON training_runs(operator_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_training_runs_created ON training_runs(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_operator_timestamp ON audit_logs(operator_id, timestamp);
   CREATE INDEX IF NOT EXISTS idx_leaderboard_sector ON leaderboard_entries(sector);
   CREATE INDEX IF NOT EXISTS idx_leaderboard_score ON leaderboard_entries(score DESC);

@@ -368,7 +368,12 @@ export function KineticOperatorNav() {
       {/* FULLSCREEN DUAL-DECK TACTICAL HUD CONSOLE OVERLAY */}
       <section className="fullscreen-menu-container">
         <div
-          data-nav="closed"
+          data-nav={isMenuOpen ? "open" : "closed"}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tactical Console HUD"
+          aria-hidden={!isMenuOpen}
+          inert={!isMenuOpen ? ("" as unknown as boolean) : undefined}
           className="nav-overlay-wrapper fixed inset-0 z-[80] hidden select-none"
         >
           {/* Backdrop Blur */}
@@ -403,13 +408,14 @@ export function KineticOperatorNav() {
                   value={filterQuery}
                   onChange={(e) => setFilterQuery(e.target.value)}
                   placeholder="SEARCH COMMAND / ROUTE... (e.g. SIMULATION, THREAT, DOSSIER)"
-                  className="w-full bg-[#18181B] border-2 border-black text-[#F5F3E7] font-mono text-xs px-3.5 py-2.5 pl-9 placeholder:text-zinc-500 outline-none focus:border-[#BFFF2E] transition-colors shadow-[3px_3px_0px_0px_#000000]"
+                  className="w-full bg-[#18181B] border-2 border-black text-[#F5F3E7] font-mono text-xs px-3.5 py-2.5 pl-9 placeholder:text-zinc-500 outline-none focus:border-[#BFFF2E] transition-colors shadow-[3px_3px_0px_0px_#000000] min-h-[44px]"
                 />
-                <Search className="absolute left-3 top-3 size-4 text-zinc-400 pointer-events-none" />
+                <Search className="absolute left-3 top-3.5 size-4 text-zinc-400 pointer-events-none" />
                 {filterQuery && (
                   <button
+                    type="button"
                     onClick={() => setFilterQuery("")}
-                    className="absolute right-3 top-2.5 text-xs text-[#BFFF2E] hover:underline"
+                    className="absolute right-3 top-3 text-xs text-[#BFFF2E] hover:underline cursor-pointer font-bold"
                   >
                     CLEAR
                   </button>
@@ -425,34 +431,41 @@ export function KineticOperatorNav() {
                   SYSTEM NAVIGATION INDEX
                 </span>
 
-                <ul className="menu-list space-y-3">
-                  {filteredMenuItems.map((it) => (
-                    <li key={it.label} className="menu-list-item">
-                      <button
-                        onClick={() => go(it.to)}
-                        className="w-full text-left bg-[#121214] hover:bg-[#18181B] border-2 border-black p-3.5 flex items-center justify-between transition-all shadow-[4px_4px_0px_0px_#000000] hover:shadow-[6px_6px_0px_0px_#BFFF2E] hover:-translate-x-0.5 hover:-translate-y-0.5 group cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3.5">
-                          {/* Monospaced Key Badge */}
-                          <span className="bg-[#27272A] group-hover:bg-[#BFFF2E] group-hover:text-black text-[#BFFF2E] font-mono font-black text-[11px] px-2 py-1 border border-black shadow-[1px_1px_0px_0px_#000000]">
-                            [{it.hotkey}]
-                          </span>
-                          <it.icon className="size-5 text-[#BFFF2E] shrink-0" />
-                          <div>
-                            <span className="block font-mono text-base font-black uppercase text-[#F5F3E7] group-hover:text-[#BFFF2E] transition-colors">
-                              {it.label}
-                            </span>
-                            <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                              {it.sub}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="font-mono text-xs text-muted-foreground group-hover:text-[#BFFF2E] group-hover:translate-x-1 transition-transform">
-                          →
-                        </span>
-                      </button>
+                <ul className="menu-list space-y-3" aria-label="System navigation index">
+                  {filteredMenuItems.length === 0 ? (
+                    <li className="p-4 border-2 border-black bg-[#121214] text-zinc-400 font-mono text-xs">
+                      NO DIRECTIVES MATCHING &ldquo;{filterQuery}&rdquo;.
                     </li>
-                  ))}
+                  ) : (
+                    filteredMenuItems.map((it) => (
+                      <li key={it.to} className="menu-list-item">
+                        <button
+                          type="button"
+                          onClick={() => go(it.to)}
+                          className="w-full text-left bg-[#121214] hover:bg-[#18181B] border-2 border-black p-3.5 flex items-center justify-between transition-all shadow-[4px_4px_0px_0px_#000000] hover:shadow-[6px_6px_0px_0px_#BFFF2E] hover:-translate-x-0.5 hover:-translate-y-0.5 group cursor-pointer min-h-[44px]"
+                        >
+                          <div className="flex items-center gap-3.5">
+                            {/* Monospaced Key Badge */}
+                            <span className="bg-[#27272A] group-hover:bg-[#BFFF2E] group-hover:text-black text-[#BFFF2E] font-mono font-black text-[11px] px-2 py-1 border border-black shadow-[1px_1px_0px_0px_#000000]">
+                              [{it.hotkey}]
+                            </span>
+                            <it.icon className="size-5 text-[#BFFF2E] shrink-0" />
+                            <div>
+                              <span className="block font-mono text-base font-black uppercase text-[#F5F3E7] group-hover:text-[#BFFF2E] transition-colors">
+                                {it.label}
+                              </span>
+                              <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                                {it.sub}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground group-hover:text-[#BFFF2E] group-hover:translate-x-1 transition-transform">
+                            →
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  )}
                 </ul>
               </div>
 

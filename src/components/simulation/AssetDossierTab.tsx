@@ -62,7 +62,7 @@ export const AssetDossierTab: React.FC<AssetDossierTabProps> = React.memo(
 
     return (
       <div
-        className={`w-80 sm:w-96 max-w-[calc(100vw-2rem)] border-2 border-rule bg-card/95 backdrop-blur-md p-4 shadow-comic animate-in fade-in zoom-in-95 duration-150 select-none ${className}`}
+        className={`w-80 sm:w-96 max-w-[calc(100vw-2rem)] border-2 border-rule bg-card p-4 shadow-comic animate-in fade-in zoom-in-95 duration-150 select-none ${className}`}
         role="region"
         aria-label={`Asset dossier preview for ${node.label}`}
         onClick={(e) => e.stopPropagation()}

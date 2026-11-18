@@ -9,7 +9,16 @@ import {
   type TrainingRun,
 } from "@/lib/api/training.functions";
 import { log } from "@/lib/logger";
-import { Trophy, ShieldCheck, Zap, ArrowRight, CheckCircle2, Award, LogIn } from "lucide-react";
+import {
+  Trophy,
+  ShieldCheck,
+  Zap,
+  ArrowRight,
+  CheckCircle2,
+  Award,
+  LogIn,
+  AlertTriangle,
+} from "lucide-react";
 
 export const Route = createFileRoute("/leaderboard/submit")({
   head: () => ({
@@ -46,6 +55,7 @@ function LeaderboardSubmitPage() {
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardRecord[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(true);
@@ -87,6 +97,7 @@ function LeaderboardSubmitPage() {
     if (!run) return;
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await submitToLeaderboard({
         data: {
@@ -104,8 +115,13 @@ function LeaderboardSubmitPage() {
         setSubmittedId(res.id);
         loadLeaderboard();
       }
-    } catch (err) {
-      console.error("Leaderboard submission failed:", err);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to commit drill run to global leaderboard. Please retry.";
+      setSubmitError(msg);
+      log.error("Leaderboard submission failed:", err);
     } finally {
       setSubmitting(false);
     }
@@ -211,7 +227,7 @@ function LeaderboardSubmitPage() {
                 <Link
                   to="/simulation"
                   search={{ sector: "power" }}
-                  className="inline-flex items-center gap-1.5 h-10 px-4 bg-accent text-accent-foreground border-2 border-black font-black uppercase"
+                  className="inline-flex items-center gap-1.5 h-11 min-h-[44px] px-4 bg-accent text-accent-foreground border-2 border-black font-black uppercase"
                 >
                   <Zap className="size-3.5" />
                   <span>RUN DRILL IN RANGE</span>
@@ -271,6 +287,22 @@ function LeaderboardSubmitPage() {
                   </div>
                 )}
 
+                {submitError && (
+                  <div className="p-4 border-2 border-danger bg-danger/10 text-danger font-mono text-xs space-y-1 shadow-[3px_3px_0px_#000000] flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-black">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <span>{submitError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSubmitError(null)}
+                      className="font-bold underline text-xs cursor-pointer ml-2 shrink-0"
+                    >
+                      DISMISS
+                    </button>
+                  </div>
+                )}
+
                 {submittedId ? (
                   <div className="p-4 border-2 border-green-500 bg-green-950/40 text-green-400 font-mono text-xs space-y-1.5 shadow-[3px_3px_0px_#000000]">
                     <div className="flex items-center gap-2 font-black">
@@ -286,7 +318,7 @@ function LeaderboardSubmitPage() {
                   <button
                     onClick={handleSubmit}
                     disabled={submitting || !selectedRun}
-                    className="w-full h-12 bg-accent text-accent-foreground border-2 border-black font-mono text-xs font-black uppercase shadow-[4px_4px_0px_#000000] hover:bg-lime-300 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5"
+                    className="w-full h-12 bg-accent text-accent-foreground border-2 border-black font-mono text-xs font-black uppercase shadow-[4px_4px_0px_#000000] hover:bg-lime-300 disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 min-h-[44px]"
                   >
                     <Award className="size-4 stroke-[2.5]" />
                     <span>
@@ -310,11 +342,20 @@ function LeaderboardSubmitPage() {
 
               {/* Sector Filter Pills */}
               <div className="flex flex-wrap items-center gap-1 font-mono text-xs">
-                {["ALL", "power", "water", "oil-gas", "manufacturing", "port"].map((sec) => (
+                {[
+                  "ALL",
+                  "power",
+                  "water",
+                  "oil-gas",
+                  "manufacturing",
+                  "port",
+                  "smart-building",
+                  "smart-city",
+                ].map((sec) => (
                   <button
                     key={sec}
                     onClick={() => setSectorFilter(sec)}
-                    className={`px-2.5 py-1 font-black uppercase border transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 min-h-[36px] font-black uppercase border transition-all cursor-pointer ${
                       sectorFilter === sec
                         ? "bg-accent text-accent-foreground border-black shadow-[2px_2px_0px_#000000]"
                         : "border-rule bg-[#18181B] text-foreground/80 hover:text-foreground"

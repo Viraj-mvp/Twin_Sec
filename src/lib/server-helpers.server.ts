@@ -374,38 +374,40 @@ export const BENCHMARK_DRILLS = [
 
 export async function seedBenchmarkDrills(targetOperatorId?: string | null) {
   const now = Date.now();
-  for (const b of BENCHMARK_DRILLS) {
-    const timestamp = new Date(now - b.hoursAgo * 3600 * 1000).toISOString();
-    const runId = targetOperatorId ? `${b.id}-${targetOperatorId.slice(0, 8)}` : b.id;
+  await db.transaction(async (tx) => {
+    for (const b of BENCHMARK_DRILLS) {
+      const timestamp = new Date(now - b.hoursAgo * 3600 * 1000).toISOString();
+      const runId = targetOperatorId ? `${b.id}-${targetOperatorId.slice(0, 8)}` : b.id;
 
-    // Check existence
-    const existing = await db.query.trainingRuns.findFirst({
-      where: (fields, { eq }) => eq(fields.id, runId),
-    });
-
-    if (!existing) {
-      await db.insert(trainingRuns).values({
-        id: runId,
-        operatorId: targetOperatorId || null,
-        sector: b.sector,
-        adversary: b.adversary,
-        branch: b.branch,
-        mwShed: b.mwShed,
-        mttd: b.mttd,
-        mttr: b.mttr,
-        cost: b.cost,
-        score: b.score,
-        shareUrl: b.shareUrl,
-        isolatedNodes: JSON.stringify(["PLC-01", "RTU-04", "RELAY-12"]),
-        attackType: b.attackType,
-        adversaryProfile: b.adversaryProfile,
-        attackChain: b.attackChain,
-        attemptCount: 1,
-        completedAt: timestamp,
-        createdAt: timestamp,
+      // Check existence
+      const existing = await tx.query.trainingRuns.findFirst({
+        where: (fields, { eq }) => eq(fields.id, runId),
       });
+
+      if (!existing) {
+        await tx.insert(trainingRuns).values({
+          id: runId,
+          operatorId: targetOperatorId || null,
+          sector: b.sector,
+          adversary: b.adversary,
+          branch: b.branch,
+          mwShed: b.mwShed,
+          mttd: b.mttd,
+          mttr: b.mttr,
+          cost: b.cost,
+          score: b.score,
+          shareUrl: b.shareUrl,
+          isolatedNodes: JSON.stringify(["PLC-01", "RTU-04", "RELAY-12"]),
+          attackType: b.attackType,
+          adversaryProfile: b.adversaryProfile,
+          attackChain: b.attackChain,
+          attemptCount: 1,
+          completedAt: timestamp,
+          createdAt: timestamp,
+        });
+      }
     }
-  }
+  });
 }
 
 export async function updateRunHint(

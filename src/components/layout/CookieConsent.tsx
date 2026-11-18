@@ -37,9 +37,9 @@ export function CookieConsent() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9999] border border-accent bg-background/95 p-6 backdrop-blur shadow-2xl max-w-md font-mono text-xs select-none space-y-4 animate-reveal">
-      <div className="flex items-center gap-2 border-b border-rule pb-2">
-        <span className="size-2 bg-accent animate-pulse rounded-full" />
+    <div className="fixed bottom-6 right-6 z-[9999] border-2 border-accent bg-[#121214] p-6 shadow-[6px_6px_0px_0px_#000000] max-w-md font-mono text-xs select-none space-y-4 animate-reveal">
+      <div className="flex items-center gap-2 border-b-2 border-rule pb-2">
+        <span className="size-2 bg-accent animate-pulse" />
         <span className="mono-label text-accent font-bold">TACTICAL DIRECTIVE: COOKIE CONSENT</span>
       </div>
       <p className="text-foreground/80 leading-relaxed text-[11px]">
@@ -50,14 +50,16 @@ export function CookieConsent() {
 
       <div className="flex gap-3 pt-2">
         <button
+          type="button"
           onClick={handleReject}
-          className="flex-1 border border-accent/40 bg-accent/5 hover:bg-accent/20 text-accent font-mono text-[10px] py-2.5 text-center transition-colors font-bold"
+          className="flex-1 border-2 border-accent/60 bg-accent/5 hover:bg-accent/20 text-accent font-mono text-xs py-2.5 min-h-[44px] flex items-center justify-center transition-colors font-bold cursor-pointer"
         >
           REJECT NON-ESSENTIAL
         </button>
         <button
+          type="button"
           onClick={handleAccept}
-          className="flex-1 bg-accent text-accent-foreground hover:bg-foreground hover:text-background font-mono text-[10px] py-2.5 text-center transition-colors font-bold"
+          className="flex-1 bg-accent text-accent-foreground border-2 border-black hover:bg-foreground hover:text-background font-mono text-xs py-2.5 min-h-[44px] flex items-center justify-center transition-colors font-bold shadow-[2px_2px_0px_#000000] cursor-pointer"
         >
           ACCEPT ALL & ENLIST
         </button>

@@ -4,12 +4,13 @@ import { db } from "../db/db";
 import { trainingRuns, leaderboardEntries, operators } from "../db/schema";
 import { eq, or, isNull, avg, max, count, desc } from "drizzle-orm";
 import { getAuthOperatorId, seedBenchmarkDrills } from "../server-helpers.server";
+import type { SectorId } from "@/data/scenarios";
 
 export interface TrainingRun {
   id: string;
   timestamp: string;
   createdAt?: string;
-  sector: string;
+  sector: SectorId;
   adversary: string;
   branch: string;
   mwShed: number;
@@ -233,7 +234,7 @@ export const getTrainingRuns = createServerFn({ method: "GET" }).handler(async (
     id: r.id,
     timestamp: r.createdAt,
     createdAt: r.createdAt,
-    sector: r.sector,
+    sector: r.sector as SectorId,
     adversary: r.adversary,
     branch: r.branch,
     mwShed: r.mwShed,
@@ -348,13 +349,21 @@ export const generateReplayLink = createServerFn({ method: "POST" })
   });
 
 const SubmitLeaderboardInput = z.object({
-  trainingRunId: z.string(),
-  sector: z.string(),
+  trainingRunId: z.string().min(4).max(64),
+  sector: z.enum([
+    "power",
+    "water",
+    "oil-gas",
+    "manufacturing",
+    "port",
+    "smart-building",
+    "smart-city",
+  ]),
   score: z.number().min(0).max(100),
-  mwShed: z.number(),
-  mttd: z.number().optional().default(30),
-  mttr: z.number().optional().default(120),
-  adversary: z.string(),
+  mwShed: z.number().min(0).max(1_000_000),
+  mttd: z.number().min(0).max(86400).optional().default(30),
+  mttr: z.number().min(0).max(604800).optional().default(120),
+  adversary: z.string().trim().min(2).max(64),
 });
 
 export const submitToLeaderboard = createServerFn({ method: "POST" })
@@ -363,6 +372,34 @@ export const submitToLeaderboard = createServerFn({ method: "POST" })
     const operatorId = await getAuthOperatorId();
     if (!operatorId) {
       throw new Error("Unauthorized. Please log in to submit to the public leaderboard.");
+    }
+
+    // Verify run ownership & existence
+    const run = await db.query.trainingRuns.findFirst({
+      where: (fields, { and, eq, or, isNull }) =>
+        and(
+          eq(fields.id, data.trainingRunId),
+          or(eq(fields.operatorId, operatorId), isNull(fields.operatorId)),
+        ),
+    });
+    if (!run) {
+      throw new Error(
+        "Invalid training run: Run record does not exist or does not belong to operator.",
+      );
+    }
+
+    // Rate limiting: 10-second cooldown per operator
+    const lastSub = await db.query.leaderboardEntries.findFirst({
+      where: (fields, { eq }) => eq(fields.operatorId, operatorId),
+      orderBy: (fields, { desc }) => [desc(fields.createdAt)],
+    });
+    if (lastSub && lastSub.createdAt) {
+      const diffMs = Date.now() - new Date(lastSub.createdAt).getTime();
+      if (diffMs < 10000) {
+        throw new Error(
+          "Rate limit exceeded: Please wait 10 seconds between leaderboard submissions.",
+        );
+      }
     }
 
     const op = await db.query.operators.findFirst({

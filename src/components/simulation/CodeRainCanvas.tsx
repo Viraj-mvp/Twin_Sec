@@ -183,10 +183,54 @@ export const CodeRainCanvas: React.FC<CodeRainCanvasProps> = ({ className = "" }
       animationFrameId = requestAnimationFrame(render);
     };
 
-    animationFrameId = requestAnimationFrame(render);
+    let isVisible = true;
+    let isTabVisible = typeof document !== "undefined" ? !document.hidden : true;
+
+    const startLoop = () => {
+      if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(render);
+      }
+    };
+
+    const stopLoop = () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = 0;
+      }
+    };
+
+    let observer: IntersectionObserver | null = null;
+    if (typeof window !== "undefined" && "IntersectionObserver" in window) {
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          isVisible = entry.isIntersecting;
+          if (isVisible && isTabVisible) {
+            startLoop();
+          } else {
+            stopLoop();
+          }
+        },
+        { threshold: 0.05 },
+      );
+      observer.observe(canvas);
+    }
+
+    const handleVisibilityChange = () => {
+      isTabVisible = !document.hidden;
+      if (isVisible && isTabVisible) {
+        startLoop();
+      } else {
+        stopLoop();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    startLoop();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      stopLoop();
+      observer?.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       resizeObserver.disconnect();
     };
   }, []);

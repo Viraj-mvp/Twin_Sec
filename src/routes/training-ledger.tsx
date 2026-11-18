@@ -8,6 +8,13 @@ import { Trophy } from "lucide-react";
 import { log } from "@/lib/logger";
 import DOMPurify from "dompurify";
 
+function safeSanitize(text: string): string {
+  if (typeof window !== "undefined" && DOMPurify?.sanitize) {
+    return DOMPurify.sanitize(text);
+  }
+  return text.replace(/[<>]/g, "");
+}
+
 interface DebriefReportData {
   metadata?: {
     runId?: string;
@@ -159,16 +166,14 @@ function TrainingLedgerPage() {
         ...data,
         redTeamReport: {
           ...data.redTeamReport,
-          initialAccessVector: DOMPurify.sanitize(data.redTeamReport?.initialAccessVector || ""),
-          tacticsUsed: (data.redTeamReport?.tacticsUsed || []).map((t: string) =>
-            DOMPurify.sanitize(t),
-          ),
-          breachOutcome: DOMPurify.sanitize(data.redTeamReport?.breachOutcome || ""),
+          initialAccessVector: safeSanitize(data.redTeamReport?.initialAccessVector || ""),
+          tacticsUsed: (data.redTeamReport?.tacticsUsed || []).map((t: string) => safeSanitize(t)),
+          breachOutcome: safeSanitize(data.redTeamReport?.breachOutcome || ""),
         },
         blueTeamReport: {
           ...data.blueTeamReport,
           recommendations: (data.blueTeamReport?.recommendations || []).map((r: string) =>
-            DOMPurify.sanitize(r),
+            safeSanitize(r),
           ),
         },
       };
@@ -361,7 +366,7 @@ function TrainingLedgerPage() {
         </div>
 
         {/* Filter/Search/Sort Controls */}
-        <div className="border border-rule bg-background/95 backdrop-blur p-4 flex flex-wrap gap-4 items-end">
+        <div className="border border-rule bg-background p-4 flex flex-wrap gap-4 items-end">
           <div className="flex flex-col gap-1.5">
             <label className="mono-label text-xs text-foreground/60">SEARCH</label>
             <input
@@ -425,7 +430,7 @@ function TrainingLedgerPage() {
         </div>
 
         {/* Ledger Table */}
-        <div className="border border-rule bg-background/95 backdrop-blur overflow-x-auto">
+        <div className="border border-rule bg-background overflow-x-auto">
           <table className="w-full text-left font-mono text-xs border-collapse">
             <thead>
               <tr className="border-b border-rule bg-muted/40 text-foreground/60 uppercase text-[10px] tracking-wider">
@@ -521,7 +526,7 @@ function TrainingLedgerPage() {
 
       {/* Debrief Report Printable Modal */}
       {debriefRunId && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-background border-2 border-foreground max-w-4xl w-full p-8 space-y-6 relative max-h-[90vh] overflow-y-auto font-mono text-xs">
             <div className="flex justify-between items-start border-b-2 border-foreground pb-4">
               <div>

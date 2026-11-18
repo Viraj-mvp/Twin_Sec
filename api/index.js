@@ -53,6 +53,19 @@ export default async function handler(req, res) {
       res.setHeader(key, val);
     });
 
+    // Hardened HTTP security headers (RFC 6797, CSP Level 3, Frame Denial)
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (!res.getHeader("Content-Security-Policy")) {
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https:; frame-ancestors 'none';",
+      );
+    }
+
     const arrayBuffer = await response.arrayBuffer();
     res.end(Buffer.from(arrayBuffer));
   } catch (err) {

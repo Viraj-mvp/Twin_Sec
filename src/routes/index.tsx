@@ -41,17 +41,36 @@ function Marquee() {
     "MODBUS/TCP — 14 ANOMALIES",
     "SIMULATION CLOCK +00:14:22",
   ];
-  const all = [...items, ...items];
   return (
-    <div className="border-y border-rule bg-background overflow-hidden">
+    <div
+      className="border-y border-rule bg-background overflow-hidden"
+      role="region"
+      aria-label="Incident Ticker"
+    >
       <div className="flex whitespace-nowrap animate-ticker py-3">
-        {all.map((t, i) => (
-          <div key={i} className="mono-label flex items-center gap-6 px-6 !text-foreground">
-            <span className="size-2 bg-accent rounded-full animate-pulse-dot" />
-            <span className="text-foreground font-bold tracking-wider">{t}</span>
-            <span className="text-accent font-bold">/</span>
-          </div>
-        ))}
+        {/* Primary Track (read by screen readers) */}
+        <div className="flex shrink-0 items-center">
+          {items.map((t, i) => (
+            <div key={i} className="mono-label flex items-center gap-6 px-6 !text-foreground">
+              <span className="size-2 bg-accent rounded-full animate-pulse-dot" />
+              <span className="text-foreground font-bold tracking-wider">{t}</span>
+              <span className="text-accent font-bold">/</span>
+            </div>
+          ))}
+        </div>
+        {/* Visual Seamless Loop Clone (ignored by screen readers) */}
+        <div className="flex shrink-0 items-center" aria-hidden="true">
+          {items.map((t, i) => (
+            <div
+              key={`clone-${i}`}
+              className="mono-label flex items-center gap-6 px-6 !text-foreground"
+            >
+              <span className="size-2 bg-accent rounded-full animate-pulse-dot" />
+              <span className="text-foreground font-bold tracking-wider">{t}</span>
+              <span className="text-accent font-bold">/</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -96,7 +115,7 @@ function Hero() {
   const leadRef = useWordReveal<HTMLParagraphElement>();
   const liveClock = useLiveClock();
   return (
-    <section className="relative border-b border-rule overflow-hidden">
+    <div className="relative border-b border-rule overflow-hidden w-full">
       <div className="absolute inset-0 grid-bg opacity-40" />
       <div className="absolute inset-0">
         <img
@@ -175,14 +194,14 @@ function Hero() {
             <div className="flex gap-3 pt-2">
               <Link
                 to="/twin-engine"
-                className="flex-1 bg-foreground text-background mono-label py-3 text-center hover:bg-accent hover:text-accent-foreground transition-colors"
+                className="flex-1 bg-foreground text-background mono-label py-3 text-center hover:bg-accent hover:text-accent-foreground transition-colors min-h-[44px] flex items-center justify-center font-bold"
               >
                 ENTER TWIN ENGINE →
               </Link>
               <Link
                 to="/simulation"
                 search={{ sector: "power" }}
-                className="border border-foreground/40 mono-label px-4 py-3 hover:border-accent hover:text-accent transition-colors"
+                className="border border-foreground/40 mono-label px-4 py-3 hover:border-accent hover:text-accent transition-colors min-h-[44px] flex items-center justify-center font-bold"
                 aria-label="Launch simulation"
               >
                 ▶
@@ -191,14 +210,14 @@ function Hero() {
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function Manifesto() {
   const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
   return (
-    <section className="border-b border-rule">
+    <div className="border-b border-rule w-full">
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-40 grid grid-cols-12 gap-8">
         <div className="col-span-12 md:col-span-3 mono-label space-y-2">
           <p>SECTION 01</p>
@@ -207,7 +226,7 @@ function Manifesto() {
           </p>
         </div>
         <div className="col-span-12 md:col-span-9">
-          <p className="display text-5xl md:text-7xl lg:text-[110px] leading-[0.9]" data-reveal>
+          <h2 className="display text-5xl md:text-7xl lg:text-[110px] leading-[0.9]" data-reveal>
             Software does not
             <br />
             stop at the screen.
@@ -217,7 +236,7 @@ function Manifesto() {
             It lifts pressure.
             <br />
             <span className="text-foreground/40">It opens valves.</span>
-          </p>
+          </h2>
           <div className="mt-16 grid md:grid-cols-3 gap-10 md:gap-16">
             <p className="font-serif text-xl leading-snug">
               For thirty years, IT and OT were governed as separate continents. The packets crossed
@@ -234,13 +253,17 @@ function Manifesto() {
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function AttackSurface() {
   const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
   const [selectedId, setSelectedId] = useState("T-002");
+  const [severityFilter, setSeverityFilter] = useState<"ALL" | "CRITICAL" | "HIGH" | "MEDIUM">(
+    "ALL",
+  );
+
   const rows: Array<{
     id: string;
     sector:
@@ -273,7 +296,7 @@ function AttackSurface() {
     },
     {
       id: "T-002",
-      sector: "water",
+      sector: "manufacturing",
       vector: "PLC ladder-logic silent rewrite",
       asset: "Siemens S7-1500",
       severity: "CRITICAL",
@@ -348,10 +371,12 @@ function AttackSurface() {
     },
   ];
 
-  const selected = rows.find((r) => r.id === selectedId) || rows[1];
+  const filteredRows =
+    severityFilter === "ALL" ? rows : rows.filter((r) => r.severity === severityFilter);
+  const selected = filteredRows.find((r) => r.id === selectedId) || filteredRows[0] || rows[0];
 
   return (
-    <section id="attack" className="border-b border-rule bg-paper text-ink">
+    <div id="attack" className="border-b border-rule bg-paper text-ink w-full">
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-32">
         <div className="flex flex-wrap items-end justify-between gap-8 border-b-2 border-ink pb-8">
           <div>
@@ -373,7 +398,34 @@ function AttackSurface() {
           </div>
         </div>
 
-        <div className="mt-16 grid grid-cols-12 gap-6 md:gap-10">
+        {/* Severity Filter Controls */}
+        <div
+          role="group"
+          aria-label="Filter attack vectors by severity"
+          className="mt-8 flex flex-wrap items-center gap-2"
+        >
+          <span className="mono-label text-ink/60! text-xs mr-2 font-bold">SEVERITY FILTER:</span>
+          {(["ALL", "CRITICAL", "HIGH", "MEDIUM"] as const).map((sev) => {
+            const isSelected = severityFilter === sev;
+            return (
+              <button
+                key={sev}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => setSeverityFilter(sev)}
+                className={`min-h-[44px] px-4 py-2 mono-label text-xs border-2 border-ink transition-all cursor-pointer font-bold ${
+                  isSelected
+                    ? "bg-ink text-paper shadow-[3px_3px_0px_0px_#000000]"
+                    : "bg-paper text-ink hover:bg-ink/10"
+                }`}
+              >
+                {sev}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-8 grid grid-cols-12 gap-6 md:gap-10">
           <div className="col-span-12 lg:col-span-8">
             <div className="grid grid-cols-12 mono-label text-ink/60! border-b border-ink/30 pb-3">
               <div className="col-span-1">ID</div>
@@ -382,14 +434,18 @@ function AttackSurface() {
               <div className="col-span-2">SEVERITY</div>
               <div className="col-span-1 text-right">Δ</div>
             </div>
-            {rows.map((r) => (
-              <div
+            {filteredRows.map((r) => (
+              <button
+                type="button"
                 key={r.id}
                 onClick={() => setSelectedId(r.id)}
-                className={`grid grid-cols-12 items-center py-5 border-b border-ink/15 transition-colors cursor-pointer ${selectedId === r.id ? "bg-ink text-paper" : "hover:bg-ink hover:text-paper"}`}
+                aria-pressed={selected.id === r.id}
+                className={`w-full text-left grid grid-cols-12 items-center py-5 border-b border-ink/15 transition-colors cursor-pointer min-h-[44px] ${
+                  selected.id === r.id ? "bg-ink text-paper" : "hover:bg-ink hover:text-paper"
+                }`}
               >
                 <div
-                  className={`col-span-1 mono-label ${selectedId === r.id ? "!text-paper/70" : "!text-ink/70 group-hover:!text-paper/70"}`}
+                  className={`col-span-1 mono-label ${selected.id === r.id ? "!text-paper/70" : "!text-ink/70 group-hover:!text-paper/70"}`}
                 >
                   {r.id}
                 </div>
@@ -398,13 +454,13 @@ function AttackSurface() {
                 <div className="col-span-2 flex items-center gap-2">
                   <span className={`size-2 ${r.color}`} />
                   <span
-                    className={`mono-label ${selectedId === r.id ? "!text-paper" : "!text-ink group-hover:!text-paper"}`}
+                    className={`mono-label ${selected.id === r.id ? "!text-paper" : "!text-ink group-hover:!text-paper"}`}
                   >
                     {r.severity}
                   </span>
                 </div>
-                <div className="col-span-1 text-right font-mono text-sm">{r.drift}</div>
-              </div>
+                <div className="col-span-1 text-right font-mono text-sm pr-2">{r.drift}</div>
+              </button>
             ))}
           </div>
 
@@ -427,7 +483,7 @@ function AttackSurface() {
               <Link
                 to="/simulation"
                 search={{ sector: selected.sector }}
-                className="mt-8 w-full bg-ink text-paper mono-label py-3 hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-center"
+                className="mt-8 w-full bg-ink text-paper mono-label py-3 min-h-[44px] hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-center font-bold"
               >
                 REPLAY INCIDENT →
               </Link>
@@ -435,14 +491,14 @@ function AttackSurface() {
           </aside>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function Spread() {
   const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
   return (
-    <section id="facility" className="border-b border-rule">
+    <div id="facility" className="border-b border-rule w-full">
       <div className="grid grid-cols-12">
         <div className="col-span-12 lg:col-span-7 relative min-h-[70vh] border-r border-rule">
           <img
@@ -473,7 +529,7 @@ function Spread() {
             <p ref={scrambleRef} className="mono-label !text-ink/60">
               SECTION 04 — EVERY CABLE, EVERY RELAY.
             </p>
-            <h3 className="display text-5xl md:text-7xl leading-[0.9] mt-3">
+            <h2 className="display text-5xl md:text-7xl leading-[0.9] mt-3">
               Every cable.
               <br />
               Every relay.
@@ -481,7 +537,7 @@ function Spread() {
               <span className="italic font-serif normal-case tracking-tight">
                 Every consequence.
               </span>
-            </h3>
+            </h2>
             <p className="font-serif text-lg mt-8 leading-snug text-ink/80">
               Import your P&amp;ID. Bind to your historian. TwinSec builds a physics-faithful twin
               and runs ten thousand adversaries against it before breakfast.
@@ -501,7 +557,7 @@ function Spread() {
           </dl>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -536,7 +592,7 @@ function Replay() {
     },
   ];
   return (
-    <section id="replay" className="border-b border-rule">
+    <div id="replay" className="border-b border-rule w-full">
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-36">
         <div className="grid grid-cols-12 gap-8 mb-16">
           <div className="col-span-12 md:col-span-4 mono-label">
@@ -545,34 +601,36 @@ function Replay() {
             </p>
           </div>
           <div className="col-span-12 md:col-span-8">
-            <h3 className="display text-6xl md:text-8xl lg:text-[120px] leading-[0.85]">
+            <h2 className="display text-6xl md:text-8xl lg:text-[120px] leading-[0.85]">
               Rewind the <span className="text-accent">incident.</span>
               <br />
               Audit the{" "}
               <span className="italic font-serif normal-case tracking-tight">decision.</span>
-            </h3>
+            </h2>
           </div>
         </div>
 
         <div className="grid grid-cols-12 gap-8 lg:gap-16">
-          <ol className="col-span-12 lg:col-span-8 relative">
+          <div className="col-span-12 lg:col-span-8 relative">
             <div className="absolute left-[7.5rem] top-2 bottom-2 w-px bg-rule hidden md:block" />
-            {events.map((e, i) => (
-              <li
-                key={i}
-                className="grid grid-cols-[7rem_1fr] md:grid-cols-[7rem_2rem_1fr] items-start gap-4 py-8 border-b border-rule"
-              >
-                <div className="font-mono text-foreground/60 text-sm pt-1">T+{e.t}</div>
-                <div className="hidden md:flex justify-center pt-2">
-                  <span className="size-3 bg-accent ring-4 ring-background" />
-                </div>
-                <div>
-                  <p className="mono-label text-accent">{e.tag}</p>
-                  <p className="font-serif text-2xl mt-2 leading-snug">{e.a}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
+            <ol className="relative">
+              {events.map((e, i) => (
+                <li
+                  key={i}
+                  className="grid grid-cols-[7rem_1fr] md:grid-cols-[7rem_2rem_1fr] items-start gap-4 py-8 border-b border-rule"
+                >
+                  <div className="font-mono text-foreground/60 text-sm pt-1">T+{e.t}</div>
+                  <div className="hidden md:flex justify-center pt-2">
+                    <span className="size-3 bg-accent ring-4 ring-background" />
+                  </div>
+                  <div>
+                    <p className="mono-label text-accent">{e.tag}</p>
+                    <p className="font-serif text-2xl mt-2 leading-snug">{e.a}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
 
           <aside className="col-span-12 lg:col-span-4">
             <div className="relative border border-rule overflow-hidden sticky top-28">
@@ -602,13 +660,13 @@ function Replay() {
           </aside>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function Quote() {
   return (
-    <section className="border-b border-rule bg-paper text-ink">
+    <div className="border-b border-rule bg-paper text-ink w-full">
       <div className="mx-auto max-w-[1400px] px-6 lg:px-10 py-32 lg:py-44 text-center">
         <p className="mono-label !text-ink/60">CITATION 01</p>
         <blockquote className="font-serif italic text-3xl md:text-5xl lg:text-6xl leading-[1.1] mt-8">
@@ -624,7 +682,7 @@ function Quote() {
           M. ARENS · DEPUTY CISO · A NORTH-SEA OPERATOR
         </p>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -657,17 +715,17 @@ function Dossier() {
     },
   ];
   return (
-    <section id="dossier" className="border-b border-rule">
+    <div id="dossier" className="border-b border-rule w-full">
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-24 lg:py-36">
         <div className="grid grid-cols-12 gap-8 border-b border-rule pb-10">
           <p ref={scrambleRef} className="col-span-12 md:col-span-3 mono-label">
             SECTION 06 — CAPABILITY
           </p>
-          <h3 className="col-span-12 md:col-span-9 display text-5xl md:text-7xl lg:text-[100px] leading-[0.88]">
+          <h2 className="col-span-12 md:col-span-9 display text-5xl md:text-7xl lg:text-[100px] leading-[0.88]">
             Four instruments.
             <br />
             <span className="text-foreground/40">One control room.</span>
-          </h3>
+          </h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
           {items.map((it, i) => (
@@ -680,7 +738,7 @@ function Dossier() {
                 <span className="group-hover:!text-accent-foreground">{it.m}</span>
               </div>
               <div>
-                <h4 className="display text-6xl">{it.k}</h4>
+                <h3 className="display text-6xl">{it.k}</h3>
                 <p className="font-serif text-lg mt-4 leading-snug text-foreground/80 group-hover:text-accent-foreground">
                   {it.t}
                 </p>
@@ -689,14 +747,29 @@ function Dossier() {
           ))}
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function Closing() {
   const scrambleRef = useScrambleReveal<HTMLParagraphElement>();
+  const [requestEmail, setRequestEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "submitting" | "confirmed">("idle");
+  const [ticketCode, setTicketCode] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestEmail || !requestEmail.includes("@")) return;
+    setStatus("submitting");
+    setTimeout(() => {
+      const code = `REQ-${Math.floor(1000 + Math.random() * 9000)}-${Date.now().toString(36).toUpperCase().slice(-4)}`;
+      setTicketCode(code);
+      setStatus("confirmed");
+    }, 400);
+  };
+
   return (
-    <section className="relative overflow-hidden border-b border-rule">
+    <div className="relative overflow-hidden border-b border-rule w-full">
       <div className="absolute inset-0 grid-bg opacity-30" />
       <div className="relative mx-auto max-w-[1600px] px-6 lg:px-10 py-32 lg:py-48">
         <p ref={scrambleRef} className="mono-label">
@@ -716,21 +789,83 @@ function Closing() {
           </p>
           <div className="col-span-12 md:col-span-4 md:col-start-8 md:border-l md:border-rule md:pl-8">
             <p className="mono-label">REQUEST AN EXERCISE</p>
-            <form className="mt-6 flex border border-foreground/40">
-              <input
-                type="email"
-                placeholder="operations@facility.com"
-                className="flex-1 bg-transparent px-4 py-4 font-mono text-sm placeholder:text-foreground/40 focus:outline-none"
-              />
-              <button className="bg-accent text-accent-foreground mono-label px-6 hover:bg-foreground hover:text-background transition-colors">
-                BRIEF →
-              </button>
-            </form>
-            <p className="mono-label mt-4 text-foreground/50">REPLIES WITHIN 24H · CONFIDENTIAL</p>
+            {status === "confirmed" ? (
+              <div className="mt-6 border-2 border-accent bg-accent/10 p-6 space-y-3 font-mono shadow-[4px_4px_0px_0px_#BFFF2E]">
+                <div className="flex items-center gap-2 text-accent">
+                  <span className="size-2.5 bg-accent rounded-full animate-ping" />
+                  <span className="font-black text-xs uppercase tracking-wider">
+                    EXERCISE DISPATCH TRANSMITTED
+                  </span>
+                </div>
+                <p className="text-sm text-foreground/90 leading-snug">
+                  Briefing protocol initialized for{" "}
+                  <span className="text-accent font-bold">{requestEmail}</span>.
+                </p>
+                <div className="bg-black/60 border border-rule p-2.5 text-xs text-foreground/70 flex items-center justify-between">
+                  <span>DISPATCH TICKET:</span>
+                  <span className="text-accent font-bold">{ticketCode}</span>
+                </div>
+                <p className="text-[11px] text-foreground/60 leading-relaxed">
+                  Our tactical red-team will transmit briefing coordination telemetry within 24
+                  hours.
+                </p>
+                <div className="pt-2 flex flex-wrap gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatus("idle");
+                      setRequestEmail("");
+                    }}
+                    className="text-xs text-accent underline hover:text-white cursor-pointer font-bold uppercase min-h-[44px] inline-flex items-center"
+                  >
+                    Submit Another Request
+                  </button>
+                  <a
+                    href={`mailto:operations@facility.com?subject=Exercise%20Briefing%20Request%20${ticketCode}&body=Operator:%20${encodeURIComponent(requestEmail)}`}
+                    className="text-xs text-foreground/70 hover:text-accent underline font-mono min-h-[44px] inline-flex items-center"
+                  >
+                    Direct Email Fallback →
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-6 space-y-3">
+                <div className="flex flex-col sm:flex-row border border-foreground/40 focus-within:border-accent transition-colors">
+                  <label htmlFor="exercise-email" className="sr-only">
+                    Work Email Address
+                  </label>
+                  <input
+                    id="exercise-email"
+                    type="email"
+                    required
+                    value={requestEmail}
+                    onChange={(e) => setRequestEmail(e.target.value)}
+                    placeholder="operations@facility.com"
+                    className="flex-1 bg-transparent px-4 py-3.5 font-mono text-sm placeholder:text-foreground/40 focus:outline-none min-h-[44px]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={status === "submitting"}
+                    className="bg-accent text-accent-foreground mono-label px-6 py-3.5 hover:bg-foreground hover:text-background transition-colors font-bold min-h-[44px] cursor-pointer disabled:opacity-50"
+                  >
+                    {status === "submitting" ? "TRANSMITTING..." : "BRIEF →"}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-xs font-mono text-foreground/50">
+                  <span>REPLIES WITHIN 24H · CONFIDENTIAL</span>
+                  <a
+                    href="mailto:operations@facility.com?subject=Tactical%20Exercise%20Briefing%20Inquiry"
+                    className="hover:text-accent underline min-h-[44px] inline-flex items-center"
+                  >
+                    Direct Inquiries
+                  </a>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -776,7 +911,7 @@ function MindhunterShowcase() {
   ];
 
   return (
-    <section id="mindhunter" className="border-b border-rule w-full">
+    <div id="mindhunter" className="border-b border-rule w-full">
       <div className="mx-auto max-w-[1600px] px-6 lg:px-10 py-20 lg:py-28 space-y-12">
         {/* Section Header matching Section 01 / 02 */}
         <div className="grid grid-cols-12 gap-8 border-b border-rule pb-10">
@@ -787,11 +922,11 @@ function MindhunterShowcase() {
             </p>
           </div>
           <div className="col-span-12 md:col-span-9 flex flex-col lg:flex-row justify-between lg:items-end gap-6">
-            <h3 className="display text-5xl md:text-7xl lg:text-[90px] leading-[0.88]">
+            <h2 className="display text-5xl md:text-7xl lg:text-[90px] leading-[0.88]">
               Four adversaries.
               <br />
               <span className="text-foreground/40">One control room.</span>
-            </h3>
+            </h2>
             <blockquote className="font-serif italic text-lg text-foreground/80 max-w-md border-l-2 border-accent pl-4 py-1">
               &ldquo;Before you can understand the answer, you have to understand the
               question.&rdquo;
@@ -817,7 +952,7 @@ function MindhunterShowcase() {
                   </span>
                 </div>
                 <div>
-                  <h4 className="display text-5xl group-hover:text-black">{actor.name}</h4>
+                  <h3 className="display text-5xl group-hover:text-black">{actor.name}</h3>
                   <p className="font-mono text-[10px] text-accent group-hover:text-black/80 uppercase font-bold mt-1">
                     {actor.target}
                   </p>
@@ -831,7 +966,7 @@ function MindhunterShowcase() {
                 <Link
                   to="/threat-profiles/$id"
                   params={{ id: actor.id }}
-                  className="mono-label text-xs font-bold group-hover:text-black flex items-center gap-2 hover:underline"
+                  className="mono-label text-xs font-bold group-hover:text-black flex items-center gap-2 hover:underline min-h-[44px]"
                 >
                   <span>OPEN DOSSIER</span>
                   <span>→</span>
@@ -852,17 +987,18 @@ function MindhunterShowcase() {
                 src={mindhunterImg}
                 alt="FBI BAU Interrogation Surveillance Artifact"
                 loading="lazy"
+                decoding="async"
                 width={1600}
                 height={900}
                 className="absolute inset-0 h-full w-full object-cover opacity-75 group-hover:scale-105 transition-transform duration-700"
               />
               <div className="absolute inset-0 grid-bg opacity-30 pointer-events-none" />
               <div className="absolute inset-0 scanline pointer-events-none opacity-40" />
-              <div className="absolute top-4 left-4 mono-label bg-background/80 backdrop-blur px-3 py-1 border border-rule">
+              <div className="absolute top-4 left-4 mono-label bg-background/80 px-3 py-1 border border-rule">
                 FIG. 03 — BAU SURVEILLANCE ARTIFACT // TACTICAL MONITOR
               </div>
               <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-                <span className="mono-label text-accent font-bold flex items-center gap-2 bg-background/80 backdrop-blur px-3 py-1 border border-rule">
+                <span className="mono-label text-accent font-bold flex items-center gap-2 bg-background/80 px-3 py-1 border border-rule">
                   <span className="size-2 bg-accent animate-pulse" /> RECORDING INTERROGATION LOGS
                 </span>
               </div>
@@ -870,9 +1006,9 @@ function MindhunterShowcase() {
             <div className="col-span-12 lg:col-span-5 p-8 lg:p-12 flex flex-col justify-between space-y-6">
               <div>
                 <span className="mono-label text-danger font-bold">MINDHUNTER BAU ARCHIVE</span>
-                <h4 className="display text-4xl lg:text-5xl mt-2 leading-none">
+                <h3 className="display text-4xl lg:text-5xl mt-2 leading-none">
                   POST-CAPTURE INTERROGATION INTELLIGENCE
-                </h4>
+                </h3>
                 <p className="font-serif italic text-lg mt-4 text-foreground/80 leading-snug">
                   Access raw transcripts, behavioral psych profiles, and tactical playbook
                   indicators for all 4 threat families.
@@ -881,7 +1017,7 @@ function MindhunterShowcase() {
               <div className="pt-4 flex items-center gap-4">
                 <Link
                   to="/threat-profiles"
-                  className="bg-accent text-accent-foreground px-6 py-3.5 mono-label hover:bg-foreground hover:text-background transition-colors flex-1 text-center font-bold"
+                  className="bg-accent text-accent-foreground px-6 py-3.5 mono-label hover:bg-foreground hover:text-background transition-colors flex-1 text-center font-bold min-h-[44px] flex items-center justify-center"
                 >
                   EXPLORE ALL THREAT PROFILES →
                 </Link>
@@ -890,7 +1026,7 @@ function MindhunterShowcase() {
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 

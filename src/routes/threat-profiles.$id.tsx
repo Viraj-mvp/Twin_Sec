@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 import { getThreatActor } from "@/data/threat-actors";
 import { interrogateThreatActor } from "@/lib/api/espionage.functions";
@@ -7,6 +7,13 @@ import { TwinSecLogo } from "@/components/branding/TwinSecLogo";
 import { useScrambleReveal } from "@/hooks/use-text-anim";
 import { detectPromptInjection } from "@/lib/safety-scrub";
 import DOMPurify from "dompurify";
+
+function safeSanitize(text: string): string {
+  if (typeof window !== "undefined" && DOMPurify?.sanitize) {
+    return DOMPurify.sanitize(text);
+  }
+  return text.replace(/[<>]/g, "");
+}
 
 export const Route = createFileRoute("/threat-profiles/$id")({
   head: ({ params }) => {
@@ -23,12 +30,41 @@ export const Route = createFileRoute("/threat-profiles/$id")({
       ],
     };
   },
+  loader: ({ params }) => {
+    const actor = getThreatActor(params.id);
+    if (!actor) throw notFound();
+    return { actor };
+  },
+  notFoundComponent: () => (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 font-mono select-none">
+      <div className="max-w-md w-full border-3 border-black bg-[#121214] p-8 text-center shadow-[8px_8px_0px_0px_#EF4444]">
+        <span className="bg-[#EF4444] text-white font-black text-xs px-2.5 py-0.5 border border-black inline-block uppercase tracking-wider mb-3">
+          404 · DOSSIER NOT FOUND
+        </span>
+        <h1 className="text-3xl font-black text-[#F5F3E7] tracking-tight uppercase">
+          Threat Profile Unresolved
+        </h1>
+        <p className="mt-2 text-xs text-foreground/60 leading-relaxed">
+          The requested threat family does not exist in the FBI BAU interrogation intelligence
+          archive.
+        </p>
+        <div className="mt-6">
+          <Link
+            to="/threat-profiles"
+            className="inline-flex min-h-[44px] items-center justify-center bg-[#BFFF2E] text-black border-2 border-black px-6 py-2 text-xs font-black uppercase tracking-wider shadow-[3px_3px_0px_0px_#000000] hover:bg-lime-300 transition-all cursor-pointer"
+          >
+            ← Return to Threat Profiles
+          </Link>
+        </div>
+      </div>
+    </div>
+  ),
   component: ThreatProfileDetail,
 });
 
 function ThreatProfileDetail() {
   const { id } = Route.useParams();
-  const actor = getThreatActor(id);
+  const actor = getThreatActor(id)!;
   const { operator } = useOperator();
 
   const [activeTab, setActiveTab] = useState<"dossier" | "interrogation">("dossier");
@@ -44,28 +80,16 @@ function ThreatProfileDetail() {
   const scrambleRef = useScrambleReveal<HTMLSpanElement>();
 
   useEffect(() => {
+    if (activeTab !== "interrogation") return;
     const interval = setInterval(() => {
       setRecordingSeconds((s) => s + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-
-  if (!actor) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center font-mono">
-        <div className="text-center space-y-4">
-          <p className="text-red-500 text-xl font-bold">PROFILE DOSSIER NOT FOUND</p>
-          <Link to="/threat-profiles" className="text-accent underline text-xs">
-            ← RETURN TO THREAT PROFILES
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   const formatRecTime = (sec: number) => {
     const m = Math.floor(sec / 60)
@@ -98,7 +122,7 @@ function ThreatProfileDetail() {
     const userTime = new Date().toLocaleTimeString();
     const newMsgList = [
       ...messages,
-      { sender: "interrogator" as const, text: DOMPurify.sanitize(query), timestamp: userTime },
+      { sender: "interrogator" as const, text: safeSanitize(query), timestamp: userTime },
     ];
     setMessages(newMsgList);
     setQuestionInput("");
@@ -119,7 +143,7 @@ function ThreatProfileDetail() {
         ...prev,
         {
           sender: "actor",
-          text: DOMPurify.sanitize(res.reply),
+          text: safeSanitize(res.reply),
           timestamp: res.timestamp,
           engine: res.engine,
         },
@@ -174,7 +198,7 @@ function ThreatProfileDetail() {
     const blob = new Blob(
       [
         `TWINSEC FBI BAU INTERROGATION TRANSCRIPT\nDOSSIER: ${actor.name}\nDATE: ${new Date().toLocaleDateString()}\n==================================================\n\n` +
-          lines.join("\n"),
+        lines.join("\n"),
       ],
       { type: "text/plain" },
     );
@@ -187,7 +211,7 @@ function ThreatProfileDetail() {
   };
 
   const parseMessageText = (text: string) => {
-    const sanitized = DOMPurify.sanitize(text);
+    const sanitized = safeSanitize(text);
     const match = sanitized.match(/^\[RESEARCHER NOTE:\s*([\s\S]*?)\]\n*/i);
     if (match) {
       return {
@@ -238,21 +262,19 @@ function ThreatProfileDetail() {
         <div className="flex border-2 border-ink font-mono text-sm bg-paper w-fit">
           <button
             onClick={() => setActiveTab("dossier")}
-            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest ${
-              activeTab === "dossier"
+            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest ${activeTab === "dossier"
                 ? "bg-ink text-paper border-b-4 border-ink"
                 : "bg-paper text-ink/60 hover:text-ink hover:bg-ink/5 border-b-4 border-transparent"
-            }`}
+              }`}
           >
             📄 BAU DOSSIER
           </button>
           <button
             onClick={() => setActiveTab("interrogation")}
-            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest border-l-2 border-ink ${
-              activeTab === "interrogation"
+            className={`px-8 py-4 font-bold transition-all uppercase tracking-widest border-l-2 border-ink ${activeTab === "interrogation"
                 ? "bg-danger text-paper border-b-4 border-danger"
                 : "bg-paper text-ink/60 hover:text-danger hover:bg-danger/5 border-b-4 border-transparent"
-            }`}
+              }`}
           >
             🎙️ POST-CAPTURE INTERROGATION
           </button>
@@ -405,9 +427,8 @@ function ThreatProfileDetail() {
                   return (
                     <div
                       key={idx}
-                      className={`flex flex-col space-y-2 ${
-                        m.sender === "interrogator" ? "items-end" : "items-start"
-                      }`}
+                      className={`flex flex-col space-y-2 ${m.sender === "interrogator" ? "items-end" : "items-start"
+                        }`}
                     >
                       <div className="flex items-center gap-2 mono-label text-[10px] text-ink/50 px-1">
                         <span>
@@ -424,11 +445,10 @@ function ThreatProfileDetail() {
                       </div>
 
                       <div
-                        className={`max-w-3xl border-2 transition-all relative ${
-                          m.sender === "interrogator"
+                        className={`max-w-3xl border-2 transition-all relative ${m.sender === "interrogator"
                             ? "bg-paper border-ink text-ink shadow-[4px_4px_0_0_#1a1a1a] p-5"
                             : "bg-ink border-ink text-paper shadow-[4px_4px_0_0_#ef4444] p-6 space-y-4"
-                        }`}
+                          }`}
                       >
                         {/* If actor reply has a BAU Researcher Note, render it as a styled badge */}
                         {m.sender === "actor" && note && (
